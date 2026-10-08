@@ -1,0 +1,1790 @@
+{
+    "result": "ok",
+    "wing_buffs": [
+        {
+            "name": "l_Dawn_0",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_1",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_2",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_3",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_4",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_5",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_6",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_7",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_8",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_9",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_10",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_11",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_12",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_13",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_14",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_15",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_16",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_17",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_18",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_19",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_20",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_21",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_22",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_23",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_24",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_25",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_26",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_27",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_28",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_29",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_30",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_31",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_32",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_33",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_34",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_35",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dawn_36",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_1",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_2",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_3",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_4",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_5",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_6",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_7",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_8",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_9",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_10",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_11",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_12",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_13",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_14",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_15",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_16",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_17",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_18",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_19",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_20",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_21",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_22",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_23",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_24",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_25",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_26",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_27",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_28",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_29",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_30",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_31",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_32",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_33",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_34",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_35",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_36",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Prairie_37",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_0",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_1",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_2",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_3",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_4",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_5",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_6",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_7",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_8",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_9",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_10",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_11",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_12",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_13",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_14",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_15",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_16",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_17",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_18",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_19",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_20",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_21",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_22",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_23",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_24",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_25",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_26",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_27",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_28",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_29",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_30",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_31",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_32",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_33",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_34",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_35",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Rain_36",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_0",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_1",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_2",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_3",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_4",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_5",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_6",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_7",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_8",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_9",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_10",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_11",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_12",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_13",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_14",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_15",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_16",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_17",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_18",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_19",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_20",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_21",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_22",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_23",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_24",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_25",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_26",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_27",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_28",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_29",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_30",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_31",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_32",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_33",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_34",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Sunset_35",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_0",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_1",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_2",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_3",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_4",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_5",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_6",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_7",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_8",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_9",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_10",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_11",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_12",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_13",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_14",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_15",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_16",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_17",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_18",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_19",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_20",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_21",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_22",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_23",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_24",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_25",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_26",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_27",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_28",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_29",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_30",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_31",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_32",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_33",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_34",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Dusk_35",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_0",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_1",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_2",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_3",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_4",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_5",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_6",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_7",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_8",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_9",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_10",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_11",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_12",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_13",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_14",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_15",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_16",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_17",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_18",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_19",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_20",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_21",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_22",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_23",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_24",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_25",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_26",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_27",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_28",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_29",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_30",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_31",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_32",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_33",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_34",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Night_35",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_0",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_1",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_2",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_3",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_4",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_5",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_6",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_7",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_8",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_9",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_10",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_11",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_12",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_13",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_14",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_15",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_16",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_17",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_18",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_19",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_20",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_21",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_22",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_23",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_24",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_25",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_26",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_27",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_28",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_29",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_30",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_31",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_32",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_33",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_34",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        },
+        {
+            "name": "l_Storm_35",
+            "collected": true,
+            "deposited": false,
+            "last_conversion": 0,
+            "deposit_id": 0
+        }
+    ]
+}

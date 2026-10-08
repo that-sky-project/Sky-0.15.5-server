@@ -1,0 +1,52 @@
+[2026-10-05T05:03:18.977853Z]
+POST /account/social_feed/create? HTTP/1.1
+Host: live.admin.xyz
+X-Real-Ip: 223.85.122.180
+X-Forwarded-For: 223.85.122.180
+Remote-Host: 223.85.122.180
+X-Forwarded-Proto: https
+X-Forwarded-Port: 443
+Content-Length: 272
+User-Agent: Sky-Live-com.hwb.sky/0.15.5.179644 (realme RMX6688; android 36.0.0; zh-Hans)
+X-Session-Id: 0624f368-9eeb-4734-90f1-19e5b4127385
+
+{"user":"3f463800-855f-4603-8f54-3f270c712be3","session":"612c170e3570318e2046498c967d0ba8","pool_type":"MessageBoat","pool_name":"CandleSpace","message":"你好","extra_data":{"pos":"(-3.446,0.100,27.129)","ori":"(0.000,0.945,0.000,0.327)","scale":"(1.000,1.000,1.000)"}}
+------------------------------------------------------------
+[2026-10-05T05:03:20.162355Z]
+POST /account/social_feed/create? HTTP/1.1
+Host: 127.0.0.1:2999
+User-Agent: curl/7.81.0
+Accept: */*
+Content-Type: application/json
+Content-Length: 61
+
+{"user":"5a197acd-7d5e-40e8-9940-ff0f196b552e","session":"x"}
+------------------------------------------------------------
+[2026-10-05T05:09:13.810201Z]
+POST /account/social_feed/create? HTTP/1.1
+Host: live.admin.xyz
+X-Real-Ip: 223.85.122.184
+X-Forwarded-For: 223.85.122.184
+Remote-Host: 223.85.122.184
+X-Forwarded-Proto: https
+X-Forwarded-Port: 443
+Content-Length: 273
+User-Agent: Sky-Live-com.hwb.sky/0.15.5.179644 (realme RMX6688; android 36.0.0; zh-Hans)
+X-Session-Id: 99c95ee7-8ec3-48ac-87c2-7fb034ffd6ca
+
+{"user":"3f463800-855f-4603-8f54-3f270c712be3","session":"19532ec6c54685af2ecb65e5502b2bb6","pool_type":"MessageBoat","pool_name":"CandleSpace","message":"你好","extra_data":{"pos":"(-2.256,0.100,20.312)","ori":"(0.000,0.983,0.000,-0.186)","scale":"(1.000,1.000,1.000)"}}
+------------------------------------------------------------
+[2026-10-05T05:10:49.385708Z]
+POST /account/social_feed/create? HTTP/1.1
+Host: live.admin.xyz
+X-Real-Ip: 223.85.122.184
+X-Forwarded-For: 223.85.122.184
+Remote-Host: 223.85.122.184
+X-Forwarded-Proto: https
+X-Forwarded-Port: 443
+Content-Length: 275
+User-Agent: Sky-Live-com.hwb.sky/0.15.5.179644 (realme RMX6688; android 36.0.0; zh-Hans)
+X-Session-Id: 99c95ee7-8ec3-48ac-87c2-7fb034ffd6ca
+
+{"user":"3f463800-855f-4603-8f54-3f270c712be3","session":"19532ec6c54685af2ecb65e5502b2bb6","pool_type":"MessageBoat","pool_name":"SkyHub2","message":"你们好","extra_data":{"pos":"(547.242,208.058,-26.655)","ori":"(0.000,0.234,0.000,0.972)","scale":"(1.000,1.000,1.000)"}}
+------------------------------------------------------------

@@ -1,0 +1,1502 @@
+// server.js — 0.15.5 房间服务器核心逻辑
+// 移植自 udp_relay_enet.py（已验证），按 xysky-udp 的 RoomServer 风格组织
+import { EventEmitter } from 'node:events';
+import {
+  PKT_CLIENT_CONNECT, PKT_DISCONNECT, PKT_JOIN_GAME, PKT_LEVEL_UPDATE,
+  PKT_PLAYER_LEFT, PKT_PLAYER_CHANGED_LEVEL, PKT_NET_TIME_PING,
+  PKT_NET_TIME_PONG, PKT_GAME_MSG, PKT_ENTER_GAME,
+  GM_NET_RPC, GM_PLAYER_STATE, GM_LEVEL_DATA, GM_LEVEL_DATA_REVOKE,
+  GM_LEVEL_DATA_HEARTBEAT, GM_SNAPSHOT_ACK, GM_LEVEL_DATA_ELECT,
+  GM_CRITTERS, GM_MUSIC_SYNC,
+  KNOWN_GAME_MSG_IDS, NETRPC_UUID_MAGIC,
+  buildPacket, stripConnectionMagic, setPacketHeaderMode, getPacketHeaderMode,
+  buildGameMsg, parseGameMsg, uuidString,
+  readPacketWithMagic, probeLevelId, canonicalLevelValue, KNOWN_LEVEL_IDS,
+} from './protocol.js';
+import { SnapshotReader, SnapshotWriter } from './snapshot.js';
+import { LevelData } from './leveldata.js';
+
+// 光遇一张地图里最多 8 个光之子（playerId 只有 3 bit 有效）。
+// 分配 playerId 时必须复用 1..8 的空槽位，绝不能一路递增越界。
+export const MAX_PLAYER_SLOTS = 8;
+
+// ★★ 客户端 0.15.5 **真正实现**的入站 GameMsg id（2026-10-03 由 libBootloader.so
+//   的 HandleGameMessage 跳转表直接读出，地址 0x753bec 处 dispatch、
+//   表体 @0xfa558e，msgId ∈ [2,17]）：
+//
+//     msgId -> 客户端处理函数      解析到的字段
+//       2   -> 0x753c2c  u32 玩家id + 关卡状态快照
+//       3   -> 0x753d80  【PlayerState】= 若干条 [playerId][len][state] 条目
+//       4   -> 0x753c78  u32 玩家id（Critters 一类）
+//       5   -> 无处理（走 "Received unknown game msg type"）
+//       6   -> 无处理
+//       7   -> 无处理        ← 我们原来把 7 当 GM_AFFINITY 并全量转发，其实客户端不认
+//       8   -> 0x754020  【关卡权威 ELECT】[playerId][levelId][len:u16][flag]
+//       9   -> 0x754140  [playerId][len:u16]（server request）
+//      10   -> 无处理
+//      11   -> 0x753cdc  【关卡存档 LevelState 快照】
+//      12   -> 无处理
+//      13   -> 无处理
+//      14   -> 0x753f7c  （快照 ack）
+//      15   -> 0x753fd4  （MusicSync）
+//      16   -> 无处理
+//      17   -> 0x7541ac  [levelId:u32][u16]
+//
+//   ⇒ 转发白名单只允许上面"真有处理函数"的 id。
+//     过去 KNOWN_GAME_MSG_IDS 把 7/10/12/13/16/19~24 也照转，
+//     客户端对每一条都要打一行 "Received unknown game msg type N" —— 实测
+//     3 秒内刷了 5395 行，既浪费带宽也让真日志被埋掉（排障时看不到关键信息）。
+export const CLIENT_HANDLED_GAME_MSG_IDS = new Set([
+  2, 3, 4, 8, 9, 11, 14, 15, 17,
+]);
+
+// 真正需要**原样转发**给同图玩家的 id（其余要么服务端自己处理，要么客户端不认）
+export const RELAYABLE_GAME_MSG_IDS = new Set([7, 
+  GM_NET_RPC, GM_CRITTERS, GM_MUSIC_SYNC,
+]);
+
+export class RoomServer extends EventEmitter {
+  constructor(cfg, logger) {
+    super();
+    this.cfg = cfg;
+    this.log = logger;
+    this.maxClients = cfg.udp_max_clients ?? 64;
+    this.tickRate = cfg.udp_tick_rate ?? 10;
+    this.clientTimeout = cfg.udp_client_timeout ?? 90;
+    this.roomMode = String(cfg.udp_room_mode ?? 'level').toLowerCase();
+    this.relayUnknownGamemsg = cfg.udp_relay_unknown_gamemsg ?? true;
+    // ★★ 排障探针（默认关）：把**每一条**收到的 GameMsg 打成
+    //      [RX-GM] pid=N id=<msgId> len=<bodyLen> ch=<channel> rpc="<RPC 名>" hex=<前 40 字节>
+    //    NetRpc(msgId=2) 的 body 里带 RPC 名（AvatarSpeak / OfferCandleRpc /
+    //    SocialAcceptOfferRpc / BondSyncRpc / FriendSyncRpc / WaxSyncRpc …），
+    //    所以这行日志能一次性回答「聊天气泡走哪条消息」「给蜡烛/接受走哪条 RPC」。
+    //    查完必须关掉（生产默认 false）。
+    this.debugGamemsg = cfg.udp_debug_gamemsg ?? false;
+    // 只对这几个玩家 uuid 打详细日志（空 = 全部）。避免刷屏。
+    this.debugGamemsgUser = String(cfg.udp_debug_gamemsg_user ?? '').toLowerCase();
+    this.playerStateSameLevelOnly = cfg.udp_player_state_same_level_only ?? true;
+    // ★ 2026-10-06：牵手/背背的关系镜像在 PlayerState 的 social/tail 里，
+    //   两份参考实现（xysky GameMessageService.syncPlayerStates、colorsky
+    //   game_msg/player_state.rs）都**不按关卡过滤** PlayerState；按关卡过滤
+    //   会在"两人短暂处于不同 roomKey"的那一瞬把羁绊镜像整帧丢掉 → 断手。
+    this.playerStateGlobal = cfg.udp_player_state_global !== false;
+    // ★ 2026-10-06：换图时**旧图名单延迟刷新**（毫秒，0=关闭）。
+    //   牵手/背背过图时，若立刻把对方从旧图名单里删掉，还在旧图的
+    //   那位客户端会 removePlayer(对方) ⇒ 关系被拆。延迟一小段时间，
+    //   等他自己也到新图后名单自然一致。
+    // ★ 2026-10-06：换图宽限窗口（毫秒，**默认 0=关闭**）。
+    //   >0 时：某人换图后的这段时间里，他的 NetRpc（BondSyncRpc / WaxSyncRpc /
+    //   FriendSyncRpc 这类关系信令）也会发给"他上一张图"里的玩家。
+    //   只在 p62 的名单延迟不足以修好牵手/背背时才打开（见 relayGameMsg）。
+    this.bondGraceMs = Number.isFinite(Number(cfg.udp_bond_grace_ms))
+      ? Number(cfg.udp_bond_grace_ms) : 0;
+    // ★ 2026-10-06：同一连接重新 JoinGame 时保留 netId（默认开）。
+    //   关系/牵手是按 netPlayerId 记的；重新分配 id 会让好友那边
+    //   看成"旧人走了 + 新人来了"，牵手/背背就断了。
+    this.keepPlayerId = cfg.udp_keep_player_id !== false;
+    this.rosterDelayMs = Number.isFinite(Number(cfg.udp_roster_delay_ms))
+      ? Number(cfg.udp_roster_delay_ms) : 1200;
+    this.electOnJoin = cfg.udp_elect_on_join ?? true;
+    this.relayChannel = Number.isInteger(cfg.udp_relay_channel) ? cfg.udp_relay_channel : 0;
+
+    // ★★ 关卡权威模式（2026-10-03 定版 —— 和 10-02 那版结论相反，原因写在下面）
+    //   'shared' = 进图后照常下发一条 NetLevelDataElect（GameMsg 8）告诉客户端谁
+    //              **是本关卡的权威 host**，并把权威真正上传过的关卡存档转发给同图其他人。
+    //   'self'   = 每个客户端都被告知"你自己就是权威"，服务端**一条关卡数据都不发**
+    //              （GM_LEVEL_DATA_ELECT 与 GM_LEVEL_DATA 全都不发）。
+    //
+    //   ★ 为什么改回 'shared'：10-02 那次改成 'self' 是为了修「打坐点/传送门雕像消失、
+    //     不能传送」，但那个结论下错了因果 —— 真正抹掉关卡物件的是**每 tick(10Hz)
+    //     都不停重发的那条空存档 GM_LEVEL_DATA(11)**，不是进图时那一条 ELECT。
+    //     （见 syncLevel：拿到权威真存档之前绝不发送，这条守卫才是真正的修复。）
+    //
+    //   ★ 'self' 的副作用（实机复现，就是现在"看不到对方"的原因）：
+    //     客户端在**没有收到本关卡权威信息**的情况下不会把同图玩家实体化 ——
+    //     服务端日志上一切正常（EnterGame 名单发了、PlayerState 也在 relay、
+    //     forwarded 一直涨），但屏幕上就是没有人。对照组：上游原包（照发 ELECT）
+    //     同图能互相看见，只是关卡物件被空存档抹掉 → 「能联机但过不了图」。
+    //     两个现象一起看，结论只有一个：ELECT 必须发，空存档必须不发。
+    this.authorityMode = String(cfg.udp_authority_mode ?? 'shared').toLowerCase();
+    // 'self' 模式下是否**仍然**下发一条 GM_LEVEL_DATA_ELECT（默认 false，保持 self 的原语义）。
+    // 现在生产用的是 'shared'，这个开关只在回退排障时才有意义。
+    this.selfElect = cfg.udp_self_elect ?? false;
+
+    // ── 关卡同步相关开关（默认都是"让 level 模式真正可用"的行为）──
+    // 关卡 ID 归一化：把 join / level_update 两条路径上报的关卡 ID 收敛成同一个 key
+    this.canonLevel = cfg.udp_level_id_canon ?? true;
+    // level 模式下是否严格按关卡隔离玩家列表（EnterGame / 名单刷新）
+    this.strictLevelGroup = cfg.udp_strict_level_group ?? true;
+    // FIX-15b (2026-10-04): every EnterGame roster entry must advertise the
+    // level id of the RECEIVER, not the sender's reported id. The client
+    // asserts   ourLevelId == player->levelState.netLevelId   for every entry,
+    // so a room-group roster that still carried the raw per-peer id crashed the
+    // client the moment SkyHub2 was entered.
+    // Default ON is the SAFE value: while roomKey() is the identity
+    // (udp_level_aliases=false) every rewritten id is exactly the old raw id,
+    // so this is a byte-for-byte no-op for same-id (common case) players.
+    this.rosterLevelRewrite = cfg.udp_roster_level_rewrite !== false;
+
+    // FIX-15a: opt-in extra alias pairs, e.g. "1649439303=1649439403,1=2"
+    // (left = an id the client may report, right = canonical id of the SAME
+    // visible map). Empty by default: only the built-in CandleSpace/SkyHub2
+    // pair below is active.
+    this.levelAliasPairs = new Map();
+    for (const _pair of String(cfg.udp_level_alias_pairs ?? '').split(',')) {
+      const _kv = _pair.split('=');
+      if (_kv.length !== 2) continue;
+      const _from = Number(_kv[0].trim()) >>> 0;
+      const _to = Number(_kv[1].trim()) >>> 0;
+      if (_from && _to) this.levelAliasPairs.set(_from, _to);
+    }
+    for (const [_af, _at] of this.levelAliasPairs) {
+      this.log.info("[ALIAS] level 0x" + _af.toString(16) + " -> 0x" + _at.toString(16));
+    }
+    if (cfg.udp_level_aliases !== false && cfg.udp_roster_level_rewrite === false) {
+      this.log.warning("[ALIAS] udp_level_aliases ignored: udp_roster_level_rewrite=false");
+    }
+    // 名单变化时向本图玩家重发一次 EnterGame（客户端已支持的包型，最稳）
+    this.rosterRefresh = cfg.udp_roster_refresh ?? 'entergame'; // 'entergame' | 'off'
+    // level_seq：只跟随客户端上报值，不再擅自 +1
+    this.lvseqMode = String(cfg.udp_lvseq_mode ?? 'follow').toLowerCase(); // 'follow' | 'bump'
+    // 新建关卡数据时用的 level_hash（账户侧用的是 42128；默认 0 = 保持原行为）
+    this.defaultLevelHash = Number.isInteger(cfg.udp_level_default_hash) ? cfg.udp_level_default_hash : 0;
+
+    // ★ PlayerState(GameMsg 3) 的封装方式 —— 2026-10-03 用反汇编 + 真机日志定版
+    //
+    //   客户端 HandleGameMessage 的 msgId=3 分支（0x753d80）是一个**循环**：
+    //     循环里依次读出 [playerId][len][len 字节 state]，再交给子流解码应用；
+    //     ⇒ 服务端下发的 body 必须是「若干条 [playerId][len][state] 拼起来」的列表。
+    //
+    //   'aggregate'（★ 现在用的）＝ 所有人的条目拼成一条 GameMsg，再用
+    //       **收包方自己的** playerWriter 重新编码（快照帧头 + RLE/XOR）。
+    //       它是唯一能自愈的写法：参与的人一变（进图/过图/掉线）就 forceKeyframe，
+    //       收包方解码窗口永远有基准帧。
+    //   'relay'     ＝ 把发送方的**原始帧**原样转发，外面套 [playerId][len]。
+    //       结构上看着对称，但转发的是发送方**针对它自己的窗口**编码出来的
+    //       差分帧 —— 收包方那一侧没有对应 base_seq 的基准帧，解不出来；
+    //       relay 又没有任何 resync/关键帧机制，一旦失步就**永久**失步。
+    //       现象就是「同图有人、服务端也在转发（forwarded 一直在涨），但屏幕上
+    //       看不到对方」；真机崩溃日志里的
+    //         BinaryStream.cpp(181) ... bytes read 393216 size: 415
+    //       也正是解码器拿着错位数据往下读（415 = 5 + 410 的一整条 relay 帧）。
+    //   'per_player'＝ 每个源一条 GameMsg，且**不带** [playerId][len] 前缀。
+    //       客户端会把第一个状态字节当 playerId 读 → 必定错位。仅留作对照。
+    //
+    //   ⚠️ 三个值都保留，是因为排障时要能一条配置换回来，不用改代码。
+    this.stateFraming = String(cfg.udp_player_state_framing ?? 'aggregate').toLowerCase();
+
+    // ★★ 2026-10-03 三修 —— PlayerState 下行**只发 Raw 全量帧，永不发差分帧**。
+    //
+    //   真机双端复现（MuMu 安卓15 + 用户手机，两份完全相同的崩溃墓碑）：
+    //     进图后第 1 帧（raw, save=1 base=0, 载荷 415B）→ 客户端成功应用：
+    //        I AvatarSetPos: Starting avatar at (544.503, 208.148, -27.411)
+    //        ↑ 与源 state 里那三个 float 逐位一致 ⇒ 裸 state 的格式是**对的**
+    //     紧接着第 2 帧（delta, save=0 base=1, 载荷 21B）→ 立即
+    //        E CRASH ASSERT! BinaryStream.cpp(181) Read past end of bit stream
+    //                prevBitIndexNotZero 0 currBitIndex: 0 buffer: … next: buffer+0x14
+    //                bytes read 131072 size: 415
+    //        ↑ size:415 = 我们的 blob（5 + 410）⇒ 差分帧解出来是垃圾 state，
+    //          客户端在垃圾里读到一个天文数字长度 → 越界断言。
+    //   对账：服务端日志同一时刻的 [TX-AGG] 正是
+    //        snapLen=418 帧头[save=1 base=0] 载荷=415B   ← 成功
+    //        snapLen=24  帧头[save=0 base=1] 载荷=21B    ← 崩
+    //
+    //   ⇒ 结论：本服务端对 0.15.5 的**差分（RLE+XOR 基准帧）编码无法与客户端解码器对齐**
+    //     （raw 帧走的是另一条路径，已验证正确）。既然 raw 帧每 tick 也只有 418 字节
+    //     （10Hz ≈ 4KB/s/对），私服这个量级完全无所谓 —— 那就干脆永远发 raw，彻底绕开差分。
+    //   ⚠️ 别改回 false，除非你手里有真机能证明差分可用。改 false = 回到"进图有人就闪退"。
+    this.stateRawOnly = cfg.udp_state_raw_only !== false;   // 默认 true
+
+    // ★ 下行包头格式（2026-10-01 len3/seq2 A/B 对照后确定）：
+    //   'len3' = [packet_id:u8][payload_len:u16 LE]（**正确**，3 字节）
+    //   'seq2' = [packet_id:u8][seq:u8]（会把第 3 个字节挤进 payload → 客户端整体错位 1 字节
+    //             → `BinaryStream.cpp(181) Read past end of bit stream`，仅留作对照）
+    //   注意：len3 下 PeerEntry.send() 不能再盖 seq（会污染长度低字节），见 stampTxSeq。
+    this.txHeader = String(cfg.udp_tx_header ?? 'len3').toLowerCase();
+    setPacketHeaderMode(this.txHeader);
+
+    // ★ EnterGame(17) 名单格式（2026-10-01 由 libBootloader.so 反汇编确定，见 buildRosterBody）：
+    //   'on' / 其它 = 正常发
+    //   'off'       = 干脆不发 EnterGame（排障用）
+    this.entergameMode = String(cfg.udp_entergame_mode ?? 'on').toLowerCase();
+    // ★★ EnterGame 的名单【必须包含收包者本人】。
+    //   客户端的 HandleEnterGame（0x743424）会先把 barn 里现存的玩家 Id 全部备份，
+    //   再逐条拿「新名单里的 uuid」和「旧玩家的 uuid」比对，凡是对不上的就调
+    //   removePlayer(oldNetPlayerId)（0x74ed38）。而该函数的入口就是硬断言
+    //     E/CRASH ASSERT! NetPlayer.cpp (130): netPlayerId != m_players[ 0 ].netPlayerId
+    //   —— m_players[0] 恒为本地玩家自身。因此只要名单里漏掉自己，就会
+    //   removePlayer(自己) → SIGABRT。曾经为了"别把自己列进去"而排除自己，正好踩中。
+    this.rosterExcludeSelf = cfg.udp_roster_exclude_self ?? false;
+    // ★ 排障用的"原始字节"逃生舱：设了 udp_entergame_raw_hex 就直接把这些字节当成
+    //   EnterGame 的 body 发出去（不做任何拼装），用来逐字节试探客户端期望的真实结构。
+    this.entergameRaw = cfg.udp_entergame_raw_hex
+      ? Buffer.from(String(cfg.udp_entergame_raw_hex).replace(/[^0-9a-fA-F]/g, ''), 'hex')
+      : null;
+    this.debugTx = cfg.udp_debug_tx ?? false;
+    // ★ 排障开关（默认关）：打印 PlayerState / 关卡数据的结构细节，用来对齐真实客户端字节。
+    //   每个 peer 每次进图最多打 40 条，避免刷日志。
+    this.debugState = cfg.udp_debug_state === true;
+
+    this.peers = new Map(); // peerId(BigInt) -> PeerEntry
+    this.netIdCount = 0;
+    this.levelAuthority = new Map(); // levelId -> playerId
+    this.levelsData = new Map(); // levelId -> LevelData
+    this.levelName = new Map(); // levelId -> 原始上报形态（排障用）
+    this.stats = { recv: 0, sent: 0, forwarded: 0, unknownLevel: 0, levelMismatch: 0 };
+    this._lastStats = Date.now();
+    this._lastCleanup = Date.now();
+    this._lastLevelGc = Date.now();
+    this._tickTimer = null;
+    this._tickIntervalMs = Math.max(10, Math.round(1000 / this.tickRate));
+  }
+
+  // ── 关卡身份 ─────────────────────────────────────────────────
+  // 把一段报文字节归一化成稳定关卡 key。返回 { value, recognized, from, offset }
+  resolveLevel(buf, offsets) {
+    if (!this.canonLevel) {
+      // 关掉归一化 = 保持旧的裸读行为（便于对比排障）
+      const off = Math.max(0, buf.length - 4);
+      const raw = off + 4 <= buf.length ? buf.readUInt32LE(off) : 0;
+      return { value: raw, recognized: false, from: 'raw', offset: off };
+    }
+    const hit = probeLevelId(buf, offsets);
+    if (hit) return hit;
+    // 谁也没命中：退回最朴素的位置，并标记未识别
+    const off = Math.max(0, offsets[0] ?? buf.length - 4);
+    const raw = off + 4 <= buf.length ? buf.readUInt32LE(off) : 0;
+    const c = canonicalLevelValue(raw);
+    return { ...c, offset: off, fallback: true };
+  }
+
+  noteLevel(levelId, rawValue, info) {
+    const prev = this.levelName.get(levelId);
+    const name = KNOWN_LEVEL_IDS.get(levelId);
+    if (name) return name;
+    const tag = `0x${(rawValue >>> 0).toString(16)}`;
+    if (!prev) this.levelName.set(levelId, tag);
+    return tag;
+  }
+
+  // ── 房间 / 分组 ──────────────────────────────────────────────
+  // FIX-3 (2026-10-04): map aliases share one room.
+  // CandleSpace 3526133726 and SkyHub2 2825107789 are the same visible map but
+  // the client reports either id; comparing raw levelIds split the players into
+  // two rooms, so the roster never listed the other player and every NetRpc
+  // (GameMsg 2 = the offer/give-candle flow) was dropped.
+  roomKey(levelId) {
+    const L = levelId >>> 0;
+    if (this.cfg && this.cfg.udp_level_aliases === false) return L;
+    // FIX-15b coupling: grouping is only safe together with the roster
+    // level-id rewrite. If that is off, degrade to the raw id (no crash).
+    if (!this.rosterLevelRewrite) return L;
+    // FIX-15a: opt-in extra pairs from udp_level_alias_pairs.
+    if (this.levelAliasPairs && this.levelAliasPairs.has(L)) return this.levelAliasPairs.get(L);
+    if (L === 2825107789) return 3526133726;   // SkyHub2 遇境 -> CandleSpace 遇境
+    return L;
+  }
+
+  sameRoom(a, b) {
+    if (this.roomMode === 'global') return true;
+    return this.roomKey(a.levelId) === this.roomKey(b.levelId);
+  }
+
+  // level 模式下，玩家列表是否只列同一关卡的玩家
+  // room_mode=global 表示"全服一个大房间"，此时名单也不该再按关卡裁
+  get levelListOnly() {
+    return this.roomMode !== 'global' && this.strictLevelGroup;
+  }
+
+  peersInLevel(levelId, { exclude = null, inGameOnly = true, rawLevel = false } = {}) {
+    const out = [];
+    for (const p of this.peers.values()) {
+      if (inGameOnly && !p.inGame) continue;
+      if (exclude && p.playerId === exclude) continue;
+      // FIX-15c: roster/relay grouping uses roomKey(); the level-DATA and
+      // authority layer must keep using the RAW level id (rawLevel:true).
+      // References: colorsky levels_data/level_authority and xysky
+      // LevelStateStore are keyed by the id inside the packet, and xysky
+      // setAuthority() even throws when player.levelId !== levelId.
+      if (this.levelListOnly) {
+        if (rawLevel) {
+          if ((p.levelId >>> 0) !== (levelId >>> 0)) continue;
+        } else if (this.roomKey(p.levelId) !== this.roomKey(levelId)) continue;
+      }
+      out.push(p);
+    }
+    return out;
+  }
+
+  // ── playerId 分配 ────────────────────────────────────────────
+  // ★ 2026-10-01 关键修复：旧实现无条件 `netIdCount = (netIdCount % 255) + 1`
+  //   且**永不复位**，服务跑一会儿 playerId 就涨到十几、几十。
+  //   而光遇一个房间只有 8 个玩家槽位（playerId 实际只有 3 bit 有效）。
+  //   单人时客户端不解析"别人"的条目所以看着正常；**一旦同图有第二个玩家**，
+  //   客户端就要用这个越界的 playerId 去索引/解析网络流 → 直接解析越界崩溃：
+  //      E/CRASH ASSERT! BinaryStream.cpp (181): Read past end of bit stream
+  //   现象就是服主反馈的「地图有人就闪退」。这里改成按**关卡**复用空槽位。
+  _allocPlayerId(levelId, exclude = null) {
+    // ★ p78：只统计**同一个房间**（roomKey）里已占用的槽位。
+    //   以前统计全服所有 peer ⇒ 玩家一多 1..8 就用完，掉进兜底循环分配出
+    //   33/34 这种越界 id；而协议里槽位只有 3 bit（1..8），34 & 7 = 2 会和
+    //   2 号玩家撞位 ⇒ 对方视角位置错乱 + 反复回弹（线上实测）。
+    const key = this.roomKey(levelId);
+    const used = new Set();
+    for (const p of this.peers.values()) {
+      if (p === exclude) continue;
+      if (p.playerId > 0 && this.roomKey(p.levelId) === key) used.add(p.playerId & 0xFF);
+    }
+    for (let id = 1; id <= MAX_PLAYER_SLOTS; id++) {
+      if (!used.has(id)) return id;
+    }
+    // 本房 8 个槽位全满（超过官方单房上限）：退回全局最小可用，并留下日志
+    const usedAll = new Set();
+    for (const p of this.peers.values()) {
+      if (p.playerId > 0) usedAll.add(p.playerId & 0xFF);
+    }
+    for (let id = 1; id <= 255; id++) if (!usedAll.has(id)) return id;
+    return 1;
+  }
+
+  // ★ p78：把越界(>8)或同房重复的 playerId 重新分配，并重发名单。
+  //   每 tick 检查（1 秒节流）+ 换关卡时检查，保证任何时刻同房槽位都唯一且 1..8。
+  normalizePlayerIds(reason = '') {
+    const seen = new Map(); // roomKey -> Set(playerId)
+    let fixed = 0;
+    for (const p of [...this.peers.values()]) {
+      if (!p.inGame || !p.playerId) continue;
+      const key = this.roomKey(p.levelId);
+      let ids = seen.get(key);
+      if (!ids) { ids = new Set(); seen.set(key, ids); }
+      const cur = p.playerId & 0xFF;
+      if (p.playerId > MAX_PLAYER_SLOTS || ids.has(cur)) {
+        const old = p.playerId;
+        const nid = this._allocPlayerId(p.levelId, p);
+        p.playerId = nid;
+        ids.add(nid & 0xFF);
+        fixed += 1;
+        this.log.warning(
+          `[ID] 槽位越界/撞车 ${old} -> ${nid} (${p.addr} uuid=${this._uuidToAccount(p.uuid)} ${reason})`
+        );
+      } else {
+        ids.add(cur);
+      }
+    }
+    if (fixed) {
+      const rooms = new Set();
+      for (const p of this.peers.values()) if (p.inGame) rooms.add(p.levelId);
+      for (const lv of rooms) {
+        try { this.refreshRoster(lv); } catch (e) { /* ignore */ }
+      }
+      for (const p of this.peers.values()) p._lastSources = null; // 槽位变了 → 强制关键帧
+    }
+    return fixed;
+  }
+
+  _allocPlayerId_unused(levelId) {
+    const used = new Set();
+    for (const p of this.peers.values()) {
+      if (p.playerId > 0 && p.levelId === levelId) used.add(p.playerId & 0xFF);
+    }
+    for (let id = 1; id <= MAX_PLAYER_SLOTS; id++) {
+      if (!used.has(id)) return id;
+    }
+    // 同图超过 8 人：退回单调递增，避免撞号（超出房间槽位属于客户端限制）
+    for (let i = 0; i < 256; i++) {
+      this.netIdCount = (this.netIdCount % 255) + 1;
+      if (!used.has(this.netIdCount)) return this.netIdCount;
+    }
+    return 1;
+  }
+
+  // ── ENet 事件入口（由 main.js 调用）──────────────────────────
+  onConnect(peerId, addr) {
+    if (!this.peers.has(peerId)) {
+      const e = new PeerEntry(peerId, addr);
+      e.stampTxSeq = this.txHeader !== 'len3';
+      e.debugTx = this.debugTx;
+      e.log = this.log;
+      this.peers.set(peerId, e);
+      this.log.info(`[+] 新连接 ${addr}`);
+    }
+  }
+
+  onDisconnect(peerId) {
+    const entry = this.peers.get(peerId);
+    if (!entry) return;
+    this.peers.delete(peerId);
+    // per_player 模式：这个人走了，别人发给"他"的那一路差分窗口要一起丢掉，
+    // 否则 playerId 复用时会拿旧窗口算增量，客户端一解码就错位。
+    for (const other of this.peers.values()) other.dropStateWriter(peerId);
+    this.log.info(`[-] 断开 ${entry.addr} (player_id=${entry.playerId}, level=0x${(entry.levelId >>> 0).toString(16)})`);
+
+    if (entry.inGame) {
+      // 只通知同关卡玩家，避免异图客户端凭空删人
+      const pkt = buildPacket(PKT_PLAYER_LEFT, Buffer.from([entry.playerId, 0]));
+      for (const other of this.peersInLevel(entry.levelId, { exclude: entry.playerId })) {
+        other.send(0, pkt);
+      }
+      // 关卡权威让位 + 重新选举 + 通知本图
+      const wasAuthority = this.levelAuthority.get(entry.levelId) === entry.playerId;
+      if (wasAuthority) {
+        this.levelAuthority.delete(entry.levelId);
+        const next = this.peersInLevel(entry.levelId, { exclude: entry.playerId, rawLevel: true })[0];
+        if (next) {
+          this.levelAuthority.set(entry.levelId, next.playerId);
+          const ld = this.levelsData.get(entry.levelId);
+          if (ld) ld.electedPlayer = next.playerId;
+          this.log.info(`[ELECT] 权威 ${entry.playerId} 离开 → 关卡 0x${(entry.levelId >>> 0).toString(16)} 改选 ${next.playerId}`);
+          this.sendElectTo(next);
+        } else {
+          this.levelsData.delete(entry.levelId);
+        }
+      }
+      this.refreshRoster(entry.levelId);
+    }
+  }
+
+  // 组装 EnterGame(17) 的玩家名单体。
+  // ★★ 2026-10-01 由 libBootloader.so 反汇编**完全确定**的结构（别再猜）：
+  //   解析函数 0x747158 → 通用取值 0xb0c0ac → 位读取 0xb0ad54 / 字节读取 0xb0b060。
+  //
+  //   [0]     count：**4 bit**（LSB-first），取值范围断言在 [0, 8]（kNetMaxPlayers）。
+  //           读完之后 BinaryStream 的字节读取会 **先对齐到下一个字节边界**
+  //           （0xb0b060：bitOffset != 0 → m_ptr++ 并清零 bitOffset），
+  //           所以 count 实际只占 1 个字节，字节 0 的高 4 bit 被丢弃。
+  //           ⇒ 名单体总长 = 1 + count × 37
+  //   记录（每条 37 字节，与内存里 40 字节的 struct 差 3 字节对齐填充）：
+  //     +0   1B  netPlayerId
+  //     +1   16B uuid
+  //     +17  16B 预留（客户端 readBytes 16 存进记录，官方值未知；填 0 可用）
+  //     +33  4B  u32（我们填关卡 ID）
+  //
+  //   历史坑（已排除）：曾把 count 写成 u16 LE（2 字节）→ 客户端只吃低 4 bit 当人数、
+  //   第 2 个字节被当成第一条记录的 netPlayerId，整体错位 1 字节。
+  // FIX-15b: the level id an EnterGame entry must carry for a given receiver.
+  // The client asserts ourLevelId == player->levelState.netLevelId, so a peer
+  // that only shares the receiver's ROOM GROUP (CandleSpace vs SkyHub2) has to
+  // be advertised with the receiver's own id. Returns the raw id whenever the
+  // rewrite is disabled, the room is not level-scoped, or the peer is not in
+  // the receiver's group -- i.e. the old behaviour in every other case.
+  rosterLevelId(p, forTarget) {
+    const raw = p.levelId >>> 0;
+    if (!forTarget || !this.rosterLevelRewrite) return raw;
+    if (!this.levelListOnly) return raw;
+    if (this.roomKey(p.levelId) !== this.roomKey(forTarget.levelId)) return raw;
+    return forTarget.levelId >>> 0;
+  }
+
+  buildRosterBody(list, forTarget = null) {
+    if (this.entergameRaw) return this.entergameRaw; // 排障逃生舱
+    const body = Buffer.allocUnsafe(1 + list.length * 37);
+    body[0] = list.length & 0x0F; // 4 bit 有效；高 4 bit 被读取器对齐跳过
+    let off = 1;
+    for (const p of list) {
+      body[off] = p.playerId & 0xFF;
+      p.uuid.copy(body, off + 1);
+      body.fill(0, off + 17, off + 33);
+      body.writeUInt32LE(this.rosterLevelId(p, forTarget), off + 33);
+      off += 37;
+    }
+    return body;
+  }
+
+  // 重发一次本图玩家名单（EnterGame）。客户端本来就靠这个包建列表，
+  // 名单变化时刷新它，是最不依赖"猜包格式"的做法。
+  // ★ 名单内容对同图所有人**完全一样**：本图全部玩家，含收包者本人（见 rosterExcludeSelf）。
+  refreshRoster(levelId, { excludePeer = null } = {}) {
+    if (this.rosterRefresh === 'off') return;
+    if (this.entergameMode === 'off') return;
+    // 一张图最多 8 人（count 的断言区间是 [0,8]），超了客户端会直接断言崩溃。
+    const list = this.peersInLevel(levelId).slice(0, MAX_PLAYER_SLOTS);
+    if (list.length === 0) return;
+    for (const p of list) {
+      if (excludePeer !== null && p.peerId === excludePeer) continue;
+      this.sendRoster(p, list);
+    }
+  }
+
+  // 给 target 用的名单：默认就是本图全部玩家（**含 target 自己**）。
+  // ★ 千万别改成"排除自己"：客户端 HandleEnterGame 会把新名单里找不到 uuid 的
+  //   旧玩家逐个 removePlayer()，而对自己 removePlayer 会命中
+  //   NetPlayer.cpp(130) 的硬断言 → SIGABRT。
+  rosterFor(target, list) {
+    if (!this.rosterExcludeSelf) return list;
+    return list.filter(q => q.peerId !== target.peerId && q.playerId !== target.playerId);
+  }
+
+  onReceive(peerId, channel, data) {
+    if (!data || data.length === 0) return;
+    let entry = this.peers.get(peerId);
+    if (!entry) {
+      this.onConnect(peerId, String(peerId));
+      entry = this.peers.get(peerId);
+      if (!entry) return;
+    }
+    this.stats.recv += 1;
+    entry.lastActive = Date.now();
+
+    // 连接魔数按连接粘住，不再每包瞎猜
+    const parsed = readPacketWithMagic(data, entry);
+    if (!parsed) {
+      if (this.cfg.udp_debug_packets) {
+        this.log.debug(`[RX?] 未知包 ${entry.addr}: ${data.subarray(0, 64).toString('hex')}`);
+      }
+      return;
+    }
+    if (this.cfg.udp_debug_packets) {
+      this.log.debug(`[RX] ${entry.addr} packet_id=${parsed.id} len=${parsed.body.length} magic=${entry.magicLen} raw=${data.subarray(0, 32).toString('hex')}`);
+    }
+
+    try {
+      switch (parsed.id) {
+        case PKT_CLIENT_CONNECT:
+          // 空包，握手阶段；ENet 层已处理连接
+          break;
+        case PKT_JOIN_GAME:
+          this.handleJoinGame(entry, parsed.body);
+          break;
+        case PKT_LEVEL_UPDATE:
+          this.handleLevelUpdate(entry, parsed.body);
+          break;
+        case PKT_NET_TIME_PING:
+          this.handlePing(entry, parsed.body);
+          break;
+        case PKT_GAME_MSG:
+          this.handleGameMsg(entry, channel, parsed.body);
+          break;
+        case PKT_DISCONNECT:
+          entry.disconnectNow();
+          break;
+        default:
+          if (this.cfg.udp_debug_packets) {
+            this.log.debug(`[RX] 未处理 packet_id=${parsed.id} (${entry.addr})`);
+          }
+      }
+    } catch (err) {
+      this.log.error(`处理 packet_id=${parsed.id} 时异常: ${err?.stack || err}`);
+    }
+  }
+
+  // ── PacketId 处理 ────────────────────────────────────────────
+  handleJoinGame(entry, payload) {
+    if (payload.length < 20) {
+      this.log.warning(`JoinGame 载荷过短 (${payload.length})，忽略`);
+      return;
+    }
+    const uuidBytes = Buffer.from(payload.subarray(0, 16));
+
+    // 关卡 ID：不再死读尾部 4 字节，而是多候选偏移 + 字节序归一化
+    const resolved = this.resolveLevel(payload, [
+      payload.length - 4, payload.length - 8, 16, 12, 20, 8,
+    ]);
+    const levelId = resolved.value;
+
+    // ★ 复用本关卡空槽位（1..8），不再无条件递增 —— 见 _allocPlayerId 说明
+    // ★★ 2026-10-06：同一连接重新加入（传送/重连）时**保留原 netId**：
+    //    关系（牵着/背着）在客户端是按 netPlayerId 记的，换 id 等于换人。
+    //    只有该 id 在目标关卡里已被别人占用时才重新分配。
+    let _keptId = 0;
+    if (this.keepPlayerId && entry.inGame && entry.playerId) {
+      const _taken = this.peersInLevel(levelId, { exclude: entry.playerId })
+        .some(p => p.playerId === entry.playerId);
+      if (!_taken) _keptId = entry.playerId;
+    }
+    if (_keptId) {
+      this.log.info(`[JOIN] 保留 netId=${_keptId}（同一连接重新加入，关系无需重建）`);
+    } else {
+      entry.playerId = this._allocPlayerId(levelId);
+    }
+    entry.uuid = uuidBytes;
+    entry.levelId = levelId;
+    entry.levelRaw = resolved;
+    entry.playerWriter.forceKeyframe();
+    // 关卡数据流也从头开始：第一个 GM_LEVEL_DATA 必须是 Raw 全量帧，
+    // 否则客户端那条 SnapshotReader 拿不到基准帧（no keyframe with sequence: N）。
+    entry.levelWriter.forceKeyframe();
+    entry._stN = 0; // 排障计数复位
+
+    const lvName = KNOWN_LEVEL_IDS.get(levelId) || `未知(0x${(levelId >>> 0).toString(16)})`;
+    if (!resolved.recognized) {
+      this.stats.unknownLevel += 1;
+      this.log.warning(`[JOIN] 关卡 ID 未识别 level=0x${(levelId >>> 0).toString(16)} (来源 ${resolved.from}@${resolved.offset}) payload=${payload.toString('hex')}`);
+    }
+    this.log.info(
+      `[JOIN] ${entry.addr} -> player_id=${entry.playerId} uuid=${uuidString(uuidBytes)} ` +
+      `level=0x${(levelId >>> 0).toString(16)} ${lvName} (${resolved.from}@${resolved.offset})`
+    );
+
+    // 名单 = 本关卡全部玩家（**含新玩家自己**），异图玩家不列。
+    // ★ 一次 refreshRoster 就够：它会把同一份名单发给本图每一个玩家，新玩家也在其中。
+    //   不要再额外给新玩家单独发一条 —— 两条内容相同的 EnterGame 本身是幂等的
+    //   （按 uuid 去重），但历史上那条"排除自己"的名单才是 NetPlayer.cpp(130) 的真凶。
+    const listed = this.peersInLevel(levelId, { exclude: null });
+    entry._lastSources = null;
+    for (const p of listed) p._lastSources = null; // 名单变了 → 下一帧强制关键帧
+
+    this.refreshRoster(levelId);
+
+    // 让新玩家成为该关卡权威（若还没有权威）
+    if (this.electOnJoin) {
+      if (!this.levelAuthority.has(levelId)) {
+        this.levelAuthority.set(levelId, entry.playerId);
+      }
+      if (!this.levelsData.has(levelId)) {
+        this.levelsData.set(levelId, new LevelData(
+          this.levelAuthority.get(levelId), levelId, 0, Buffer.alloc(0), this.defaultLevelHash, 0
+        ));
+      }
+      this.sendElectTo(entry);
+    }
+  }
+
+  // 给单个 target 发一条 EnterGame。名单内容由 rosterFor 决定（默认 = 传进来的整份名单）。
+  sendRoster(target, list) {
+    if (this.entergameMode === 'off') return;
+    const forTarget = this.rosterFor(target, list);
+    const body = this.buildRosterBody(forTarget, target);   // FIX-15b: receiver own level id
+    this.log.info(
+      `[TX-ROSTER] -> ${target.addr} player_id=${target.playerId} ` +
+      `名单=[${forTarget.map(p => p.playerId).join(',')}] bytes=${body.length} ` +
+      `hex=${body.toString('hex').slice(0, 48)}…`
+    );
+    target.send(0, buildPacket(PKT_ENTER_GAME, body));
+  }
+
+  handleLevelUpdate(entry, payload) {
+    // FIX-1 (2026-10-04): the LevelUpdate payload starts with levelChangeCount
+    // (u8) and both same-generation references sync level_seq from it.
+    // Without this the NetLevelDataElect we answer with still carries the OLD
+    // level_seq on the frame the client changes level, and the client drops it
+    // ("Ignored game msg (from previous level): level").
+    if (payload.length >= 1 && this.lvseqMode !== 'bump') {
+      const rptSeq = payload[0] & 0xFF;
+      if (rptSeq !== entry.lvSeq) {
+        this.log.debug("[LVSEQ] " + entry.addr + " levelChangeCount=" + rptSeq +
+                       " (was " + entry.lvSeq + ")");
+        entry.lvSeq = rptSeq;
+      }
+    }
+    if (payload.length < 18) {
+      this.log.debug(`LevelUpdate 载荷过短 (${payload.length})，忽略`);
+      return;
+    }
+    // 根因修复：换图上报里带的是同一个关卡 ID，必须用与 join 相同的归一化规则，
+    // 否则"进图的人"和"过图进来的人"会被算成两个不同关卡 → 互相看不见。
+    const resolved = this.resolveLevel(payload, [14, 12, 16, 10, payload.length - 4]);
+    const newLevel = resolved.value;
+    const oldLevel = entry.levelId;
+
+    // 旧实现无条件 lvSeq+1：真实客户端会周期性发 LevelUpdate，一涨就把
+    // 服务端下发给该玩家的所有 GameMsg 的 level_seq 打歪，客户端直接丢弃 →
+    // 看不到别人 / 过图卡住。默认改为完全跟随客户端上报值。
+    if (this.lvseqMode === 'bump' && oldLevel !== newLevel) {
+      entry.lvSeq = (entry.lvSeq + 1) & 0xFF;
+    }
+    entry.levelRaw = resolved;
+
+    if (oldLevel !== newLevel) {
+      entry.levelId = newLevel;
+      // ★ p78：换房后如果原槽位在新房里已被别人占用，必须马上改槽位，
+      //   否则两人同槽 → 位置互相串、反复回弹。
+      try {
+        const _key = this.roomKey(newLevel);
+        const _clash = [...this.peers.values()].some((q) =>
+          q !== entry && q.inGame && (q.playerId & 0xFF) === (entry.playerId & 0xFF) &&
+          this.roomKey(q.levelId) === _key);
+        if (_clash) {
+          const _old = entry.playerId;
+          entry.playerId = this._allocPlayerId(newLevel, entry);
+          this.log.warning(`[ID] ${entry.addr} 换房撞位 ${_old} -> ${entry.playerId}`);
+        }
+      } catch (e) { /* never break the packet loop */ }
+      const lvName = KNOWN_LEVEL_IDS.get(newLevel) || `未知(0x${(newLevel >>> 0).toString(16)})`;
+      this.log.info(
+        `[LEVEL] ${entry.addr} pid=${entry.playerId} uuid=${this._uuidToAccount(entry.uuid)} ` +
+        `切换 0x${(oldLevel >>> 0).toString(16)} -> 0x${(newLevel >>> 0).toString(16)} ` +
+        `${lvName} (${resolved.from}@${resolved.offset})`
+      );
+      // ★ 2026-10-06：只有**真的换了房间**（roomKey 变了）才记 BOND-WATCH。
+      //   遇境别名图（CandleSpace ↔ SkyHub2）来回切是同一房间，名单没变，
+      //   之前那种情况全是误报（实测 05:01 的 4 条都是）。
+      if (this.roomKey(oldLevel) !== this.roomKey(newLevel)) this._bondWatch(entry);
+
+      // 换图后两侧的快照窗口都作废：客户端会重置解码器，服务端必须重发全量帧
+      // 记下上一张图（relayGameMsg 的宽限窗口用；默认窗口 0 时无副作用）
+      entry.prevLevelId = oldLevel;
+      entry.levelChangedAt = Date.now();
+      entry.playerWriter.forceKeyframe();
+      entry.levelWriter.forceKeyframe();
+      entry._lastSources = null;
+      // 别人发给"他"的那一路也要重置：换图后的状态内容变了，
+      // 客户端那一侧的解码器同样会被重置。
+      for (const p of this.peers.values()) p.dropStateWriter(entry.peerId);
+
+      // 原样回显客户端自己用的那 4 个字节（避免又引入一次编码转换）
+      const rawOff = resolved.offset;
+      const lvBytes = (rawOff >= 0 && rawOff + 4 <= payload.length)
+        ? Buffer.from(payload.subarray(rawOff, rawOff + 4))
+        : (() => { const b = Buffer.alloc(4); b.writeUInt32LE(newLevel >>> 0, 0); return b; })();
+      const pkt = buildPacket(PKT_PLAYER_CHANGED_LEVEL, Buffer.concat([Buffer.from([entry.playerId]), lvBytes]));
+
+      // 通知旧关卡 + 新关卡的其他玩家（新关卡用名单刷新，旧关卡用离开通知）
+      for (const p of this.peers.values()) {
+        if (!p.inGame || p.playerId === entry.playerId) continue;
+        // 2026-10-06 还原：回到 raw levelId 比较（p55 改成 roomKey 后有人上线闪退，
+        //   先恢复到之前稳定的行为；真要放宽再单独评估）。
+        if (p.levelId === oldLevel || p.levelId === newLevel) p.send(0, pkt);
+      }
+      for (const p of this.peers.values()) {
+        if (p.inGame && p.levelId === newLevel) p._lastSources = null;
+      }
+
+      // 旧关卡权威让位 + 重新选举 + 通知
+      if (this.levelAuthority.get(oldLevel) === entry.playerId) {
+        this.levelAuthority.delete(oldLevel);
+        const next = this.peersInLevel(oldLevel, { exclude: entry.playerId, rawLevel: true })[0];
+        if (next) {
+          this.levelAuthority.set(oldLevel, next.playerId);
+          const ld = this.levelsData.get(oldLevel);
+          if (ld) ld.electedPlayer = next.playerId;
+          this.log.info(`[ELECT] 权威 ${entry.playerId} 换图离开 → 关卡 0x${(oldLevel >>> 0).toString(16)} 改选 ${next.playerId}`);
+          this.sendElectTo(next);
+        } else {
+          this.levelsData.delete(oldLevel);
+        }
+        this._refreshOldRoster(oldLevel);
+      } else {
+        this._refreshOldRoster(oldLevel);
+      }
+      // 新关卡：把新来的人同步给本图玩家
+      if (this.levelAuthority.get(newLevel) === undefined) {
+        this.levelAuthority.set(newLevel, entry.playerId);
+      }
+      if (!this.levelsData.has(newLevel)) {
+        this.levelsData.set(newLevel, new LevelData(
+          this.levelAuthority.get(newLevel), newLevel, 0, Buffer.alloc(0), this.defaultLevelHash, 0
+        ));
+      }
+      this.refreshRoster(newLevel);
+    }
+    this.sendElectTo(entry);
+  }
+
+  _refreshOldRoster(levelId) {
+    // 旧图名单延迟刷新（见构造函数 rosterDelayMs 的说明）。
+    if (this.rosterDelayMs > 0) {
+      const t = setTimeout(() => {
+        try { this.refreshRoster(levelId); } catch (e) { /* ignore */ }
+      }, this.rosterDelayMs);
+      if (t && typeof t.unref === 'function') t.unref();
+      this.log.info(`[ROSTER] 旧图 0x${(levelId >>> 0).toString(16)} 名单延迟 ${this.rosterDelayMs}ms 刷新`);
+      return;
+    }
+    this.refreshRoster(levelId);
+  }
+
+  _bondWatch(entry) {
+    // 5 秒内出现第二个换图的人 -> 打一行，方便复现"牵手/背背跨图"。
+    try {
+      this._recentLevelChanges = this._recentLevelChanges || new Map();
+      const now = Date.now();
+      for (const [pid, t] of [...this._recentLevelChanges]) {
+        if (now - t > 5000) this._recentLevelChanges.delete(pid);
+      }
+      const near = [...this._recentLevelChanges.entries()]
+        .map(([pid, t]) => `${pid}@${new Date(t).toISOString().slice(11, 19)}`);
+      this._recentLevelChanges.set(entry.playerId, now);
+      if (near.length) {
+        this.log.info(`[BOND-WATCH2] 5 秒内多人**跨房间**换图: pid=${entry.playerId} ` +
+                      `uuid=${this._uuidToAccount(entry.uuid)} 与 [${near.join(', ')}] ` +
+                      `（牵手/背背跨图就发生在这里）`);
+      }
+    } catch (e) { /* never break the packet loop */ }
+  }
+
+  handlePing(entry, payload) {
+    const now = Date.now() / 1000;
+    const body = Buffer.allocUnsafe(payload.length + 16);
+    payload.copy(body, 0);
+    body.writeDoubleLE(now, payload.length);
+    body.writeDoubleLE(now, payload.length + 8);
+    entry.send(0, buildPacket(PKT_NET_TIME_PONG, body));
+  }
+
+  // ── GameMsg 处理 ─────────────────────────────────────────────
+  handleGameMsg(entry, channel, payload) {
+    const parsed = parseGameMsg(payload);
+    if (!parsed) return;
+    const { msgId, levelSeq, body } = parsed;
+
+    // 用客户端上报的 level_seq 校正
+    entry.lvSeq = levelSeq;
+
+    if (this.debugGamemsg && (msgId === GM_NET_RPC || msgId === 7 || msgId === 10)) {
+      // 从载荷里抠出可打印串 —— NetRpc 的 RPC 名（AvatarSpeak / OfferCandleRpc /
+      // SocialAcceptOfferRpc / BondSyncRpc / FriendSyncRpc …）就直接在这里露出来，
+      // 是定位「聊天走哪条」「好友关系走哪条」的最快办法。
+      const runs = [];
+      let cur = '';
+      for (const b of body) {
+        if (b >= 0x20 && b <= 0x7e) {
+          cur += String.fromCharCode(b);
+        } else {
+          if (cur.length >= 4) runs.push(cur);
+          cur = '';
+        }
+      }
+      if (cur.length >= 4) runs.push(cur);
+      const tag = (entry.uuid || Buffer.alloc(16)).toString('hex').slice(0, 12);
+      if (!this.debugGamemsgUser || tag.startsWith(this.debugGamemsgUser)) {
+        this.log.info(
+          `[RX-GM] pid=${entry.playerId} uuid=${tag} id=${msgId} len=${body.length} ` +
+          `ch=${channel} lvSeq=${levelSeq}` +
+          (runs.length ? ` text="${runs.slice(0, 6).join('|')}"` : '') +
+          ` hex=${body.subarray(0, 40).toString('hex')}`
+        );
+      }
+    }
+
+    if (msgId === GM_PLAYER_STATE) {
+      this.handlePlayerState(entry, body);
+      if (this.stateFraming === 'relay') this.relayPlayerState(entry, body);
+      return;
+    }
+    if (msgId === GM_LEVEL_DATA) { this.handleLevelData(entry, body); return; }
+    if (msgId === GM_LEVEL_DATA_REVOKE) { this.handleLevelRevoke(entry); return; }
+    if (msgId === GM_LEVEL_DATA_HEARTBEAT) {
+      if (!this.levelAuthority.has(entry.levelId)) {
+        this.levelAuthority.set(entry.levelId, entry.playerId);
+      }
+      return;
+    }
+    if (msgId === GM_SNAPSHOT_ACK) { this.handleSnapshotAck(entry, body); return; }
+
+    if (msgId === 7) { this.handleAffinity(entry, body); return; }
+
+    let outBody = body;
+    if (msgId === GM_NET_RPC) outBody = this.rewriteNetRpc(entry, body);
+
+    // ★★ 只转发「客户端真有处理函数」的 id（见 RELAYABLE_GAME_MSG_IDS 说明）。
+    //   旧实现是 `KNOWN_GAME_MSG_IDS.has(msgId) || this.relayUnknownGamemsg` —— 因为
+    //   relayUnknownGamemsg 默认 true，等于**任何** id 都转发，包括客户端压根不认的
+    //   7/10/12/13/16/19~24。那些包到了客户端只会变成一行
+    //   `W/Net Received unknown game msg type N`，实测 3 秒 5395 行：
+    //     ① 白烧带宽（光遇一张图里位置同步是 10Hz）
+    //     ② 把真日志埋掉，导致「游戏内无关系同步」这类关键行看不见
+    //     ③ 关系/好友数据（好友树、对面装扮）走的不是这些 id，转发它们纯属干扰
+    if (RELAYABLE_GAME_MSG_IDS.has(msgId)) {
+      this.relayGameMsg(entry, msgId, outBody, channel);
+    } else if (this.relayUnknownGamemsg && CLIENT_HANDLED_GAME_MSG_IDS.has(msgId)) {
+      // 明确在客户端处理表里、但不是我们认识的那几种 → 仍然转发（保守保底）
+      this.relayGameMsg(entry, msgId, outBody, channel);
+    } else if (this.cfg.udp_debug_packets) {
+      this.log.debug(`[RX] 丢弃不转发的 GameMsg id=${msgId}（客户端无处理函数）`);
+    }
+  }
+
+  rewriteNetRpc(entry, body) {
+    // NetRpc 载荷: [net_player_id:u8][net_rpcs...]
+    // 某些 RPC 内嵌发送者 UUID，服务端需改写成真实 UUID
+    if (body.length < 1) return body;
+    const netrpc = Buffer.from(body.subarray(1));
+    if (netrpc.length >= 34 && netrpc.subarray(0, 7).equals(NETRPC_UUID_MAGIC)) {
+      if (netrpc[9] === 1) {
+        entry.uuid.copy(netrpc, 18, 0, 16);
+      }
+    }
+    return Buffer.concat([body.subarray(0, 1), netrpc]);
+  }
+
+  relayGameMsg(sender, msgId, body, channel = 0) {
+    const ch = this.relayChannel >= 0 ? this.relayChannel : channel;
+    // 宽限窗口（默认关闭）：NetRpc 在换图后的一小段时间内也发给上一张图的玩家。
+    const now = Date.now();
+    const grace = (msgId === GM_NET_RPC) && this.bondGraceMs > 0 &&
+      sender.prevLevelId !== undefined && sender.prevLevelId !== null &&
+      sender.levelChangedAt && (now - sender.levelChangedAt) < this.bondGraceMs;
+    const prevRoom = grace ? this.roomKey(sender.prevLevelId) : null;
+    for (const other of this.peers.values()) {
+      if (other === sender || !other.inGame) continue;
+      if (!this.sameRoom(other, sender)) {
+        if (!prevRoom || this.roomKey(other.levelId) !== prevRoom) continue;
+      }
+      // 每条消息的 level_seq 必须匹配目标玩家的 lv_seq
+      const gm = buildGameMsg(msgId, other.lvSeq, sender.playerId, body);
+      other.send(ch, buildPacket(PKT_GAME_MSG, gm));
+      this.stats.forwarded += 1;
+    }
+  }
+
+  sendGameMsgTo(entry, msgId, body, channel = 0, sourcePlayer = 0) {
+    const gm = buildGameMsg(msgId, entry.lvSeq, sourcePlayer, body);
+    entry.send(channel, buildPacket(PKT_GAME_MSG, gm));
+  }
+
+  // ── PlayerState（位置 / 外观 / 动作同步）─────────────────────
+  // GameMsg 7 = Affinity: [count:u8] then count * [netPlayerId:u8][value:u8].
+  // This is the ONLY thing the client sends while a player offers/accepts a
+  // candle to befriend a stranger, so the server must create the friendship.
+  _uuidToAccount(buf) {
+    try {
+      const h = Buffer.from(buf).toString('hex');
+      if (h.length !== 32) return '';
+      return h.slice(0, 8) + '-' + h.slice(8, 12) + '-' + h.slice(12, 16) +
+             '-' + h.slice(16, 20) + '-' + h.slice(20);
+    } catch (e) { return ''; }
+  }
+
+  peerByPlayerId(pid) {
+    for (const p of this.peers.values()) if (p.playerId === pid) return p;
+    return null;
+  }
+
+  handleAffinity(entry, body) {
+    try {
+      if (!body || body.length < 3) return;
+      const n = body[0] & 0xFF;
+      this._affinitySeen = this._affinitySeen || new Map();
+      const now = Date.now();
+      for (let i = 0; i < n; i++) {
+        const off = 1 + i * 2;
+        if (off + 1 >= body.length) break;
+        const netId = body[off] & 0xFF;
+        const value = body[off + 1] & 0xFF;
+        if (!netId || value === 0) continue;
+        const other = this.peerByPlayerId(netId);
+        if (!other || other === entry || !other.inGame) continue;
+        const key = entry.playerId + ':' + other.playerId;
+        if (now - (this._affinitySeen.get(key) || 0) < 15000) continue;
+        this._affinitySeen.set(key, now);
+        this.ensureFriendship(entry, other);
+      }
+    } catch (e) { /* never break the packet loop */ }
+  }
+
+  ensureFriendship(a, b) {
+    try {
+      const ua = this._uuidToAccount(a.uuid);
+      const ub = this._uuidToAccount(b.uuid);
+      if (!ua || !ub) return;
+      if (typeof fetch !== 'function') return;
+      const payload = JSON.stringify({
+        user: ua, recv_user: ub, ability_id: 1, ability_cost: 0, pos: [0, 0, 0], no_gift: true
+      });
+      fetch('http://127.0.0.1:2999/account/give_candle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload
+      }).then(r => r.text()).then(t => {
+        this.log.info('[AFFINITY] ' + ua.slice(0, 8) + ' <-> ' + ub.slice(0, 8) +
+                      ' ensureFriendship -> ' + String(t).slice(0, 90));
+      }).catch(() => {});
+    } catch (e) { /* ignore */ }
+  }
+
+  handlePlayerState(entry, body) {
+    if (body.length < 3) return;
+    const saveSeq = body[0];
+    const rawState = entry.playerReader.applyDelta(body);
+    if (rawState === null) {
+      if (this.debugState && (entry._stN = (entry._stN || 0) + 1) <= 40) {
+        this.log.info(`[RX-ST] ${entry.addr} pid=${entry.playerId} save=${body[0]} base=${body[1]} ck=${body[2]} bodyLen=${body.length} 解码失败`);
+      }
+      return;
+    }
+    if (saveSeq !== 0) entry.playerAck = saveSeq;
+    entry.playerRawState = rawState;
+    if (this.debugState && (entry._stN = (entry._stN || 0) + 1) <= 40) {
+      this.log.info(
+        `[RX-ST] ${entry.addr} pid=${entry.playerId} save=${saveSeq} base=${body[1]} ck=${body[2]} ` +
+        `bodyLen=${body.length} rawLen=${rawState.length} ` +
+        `rawHead=${rawState.subarray(0, 16).toString('hex')} rawTail=${rawState.subarray(-8).toString('hex')}`
+      );
+    }
+  }
+
+  syncFrame() {
+    if (this.stateFraming === 'relay') return; // 原样转发模式：不做任何重编码
+    if (this.stateFraming === 'aggregate') this.syncFrameAggregate();
+    else this.syncFramePerPlayer();
+  }
+
+  // ★★ 2026-07-xx / 2026-10-01：最忠实的做法 —— 把发送方**原始**的 PlayerState 帧
+  //   原样转发给同图其他人，外面只套一层 [playerId:u8][len:u32 LE]。
+  //   这样接收端的解码器看到的就是"游戏自己产出的字节"，不存在任何
+  //   解码→重编码（RLE/XOR/checksum）不一致导致的失步。
+  //   真机证据：客户端收到不含 [playerId][len] 前缀的裸帧时，会把快照帧头当成
+  //   playerId + 长度读出天文数字（`bytes read 3232452694 size: 410`）后断言崩溃。
+  relayPlayerState(sender, frame) {
+    if (!frame || frame.length === 0) return;
+    const ch = this.relayChannel >= 0 ? this.relayChannel : 0;
+    const head = Buffer.allocUnsafe(5);
+    head[0] = sender.playerId & 0xFF;
+    head.writeUInt32LE(frame.length, 1);
+    const body = Buffer.concat([head, frame]);
+    for (const other of this.peers.values()) {
+      if (other === sender || !other.inGame) continue;
+      if (!this.sameRoom(other, sender)) continue;
+      other.send(ch, buildPacket(PKT_GAME_MSG,
+        buildGameMsg(GM_PLAYER_STATE, other.lvSeq, sender.playerId, body)));
+      this.stats.forwarded += 1;
+    }
+  }
+
+  // ★ 正确做法：每个源玩家单独一条 GameMsg(3)，source_player = 该玩家的 playerId，
+  //   body 就是该玩家那一帧快照。与客户端自己上报的格式完全对称（见 handlePlayerState）。
+  syncFramePerPlayer() {
+    const sources = [...this.peers.values()].filter(
+      p => p.inGame && p.playerRawState && p.playerRawState.length > 0
+    );
+    if (sources.length === 0) return;
+
+    const sameLevelOnly = this.playerStateGlobal
+      ? false
+      : (this.roomMode !== 'global' || this.playerStateSameLevelOnly);
+    const ch = this.relayChannel >= 0 ? this.relayChannel : 0;
+
+    for (const target of this.peers.values()) {
+      if (!target.inGame) continue;
+      for (const src of sources) {
+        if (src === target) continue;
+        if (src.playerId === target.playerId) continue;
+        // FIX-15d: use the room group (roomKey) so two players on the SAME
+        // visible map but with different reported ids still see each other
+        // move. With udp_level_aliases=false roomKey() is the identity and this
+        // is exactly the old raw comparison.
+        if (sameLevelOnly && this.roomKey(src.levelId) !== this.roomKey(target.levelId)) continue;
+        // 每个目标 × 每个源 一对独立的差分窗口，互不干扰
+        const w = target.stateWriterFor(src);
+        const snap = w.generateDelta(src.playerRawState);
+        target.send(ch, buildPacket(PKT_GAME_MSG,
+          buildGameMsg(GM_PLAYER_STATE, target.lvSeq, src.playerId, snap)));
+        this.stats.forwarded += 1;
+      }
+    }
+  }
+
+  // 旧的错误实现（把所有人拼成一个 blob）。仅留作 A/B 对照。
+  syncFrameAggregate() {
+    // 把所有人的状态聚合后，按 tick 下发给每个玩家
+    const sources = [...this.peers.values()].filter(
+      p => p.inGame && p.playerRawState && p.playerRawState.length > 0
+    );
+    if (sources.length === 0) return;
+
+    // level 模式下强制按关卡隔离（不受 udp_player_state_same_level_only 影响），
+    // 避免"开着关卡同步却因为另一个开关被关掉而全服同屏"。
+    const sameLevelOnly = this.playerStateGlobal
+      ? false
+      : (this.roomMode !== 'global' || this.playerStateSameLevelOnly);
+
+    for (const target of this.peers.values()) {
+      if (!target.inGame) continue;
+      const blob = [];
+      const ids = [];
+      for (const src of sources) {
+        if (src.playerId === target.playerId) continue;
+        // FIX-15d: use the room group (roomKey) so two players on the SAME
+        // visible map but with different reported ids still see each other
+        // move. With udp_level_aliases=false roomKey() is the identity and this
+        // is exactly the old raw comparison.
+        if (sameLevelOnly && this.roomKey(src.levelId) !== this.roomKey(target.levelId)) continue;
+        ids.push(src.playerId);
+        const head = Buffer.allocUnsafe(5);
+        head[0] = src.playerId & 0xFF;
+        head.writeUInt32LE(src.playerRawState.length, 1);
+        blob.push(head, src.playerRawState);
+      }
+      if (blob.length === 0) continue;
+      // 参与聚合的玩家集合变了（有人进图/过图/掉线）→ 差分基准作废，
+      // 客户端那边解码器已经重置，服务端必须发全量帧，否则这一路同步会永久失步。
+      // ★ 2026-10-03：stateRawOnly=true 时**每帧都强制 Raw**（见 stateRawOnly 说明：
+      //   我们对 0.15.5 的差分编码与客户端解码器对不上，发差分 = 客户端读垃圾 = 闪退）。
+      const sig = ids.join(',');
+      if (this.stateRawOnly || target._lastSources !== sig) {
+        target.playerWriter.forceKeyframe();
+        target._lastSources = sig;
+      }
+      const snap = target.playerWriter.generateDelta(Buffer.concat(blob));
+      if (this.debugState && (target._txN = (target._txN || 0) + 1) <= 40) {
+        this.log.info(
+          `[TX-AGG] -> ${target.addr} pid=${target.playerId} 名单=[${ids.join(',')}] ` +
+          `blobLen=${Buffer.concat(blob).length} snapLen=${snap.length} ` +
+          `帧头[save=${snap[0]} base=${snap[1]} ck=${snap[2]}] 载荷=${snap.length - 3}B`
+        );
+      }
+      this.sendGameMsgTo(target, GM_PLAYER_STATE, snap);
+    }
+  }
+
+  // ── 关卡数据 / 权威 ──────────────────────────────────────────
+  sendElectTo(entry) {
+    const levelId = entry.levelId;
+
+    if (this.authorityMode === 'self') {
+      // ★★ 2026-10-02 二修 —— 这一版才是真正生效的修复。
+      //
+      //   ELECT 的消息体就是一个完整 LevelData（23 字节头 + data，见 leveldata.js）。
+      //   本服务端并没有任何真实的关卡存档，data 恒为空 Buffer(length=0)。
+      //   客户端收到这条 ELECT 后，会把这份**空存档**当成"本关卡的权威快照"
+      //   应用到自己的关卡上 → 关卡里的固定物件（遇境中央的**传送打坐点**、
+      //   七座传送门雕像…）全部消失 → **坐下不传送 / 点位没了**；
+      //   同时它也不再去实体化同图的其他玩家 → **同一张图互相看不见**。
+      //
+      //   关键：这条 ELECT 是**进图必发**的，所以**单人也会中招**，与人数无关。
+      //   既然 'self' 的定义就是"人人都是自己的权威"，那就一帧关卡数据都不下发，
+      //   关卡内容完全交给客户端按本地（离线）路径初始化。
+      //
+      //   ⚠️ 万一将来发现客户端必须收到 ELECT 才会 spawn 关卡内容（现象：进图后
+      //      场景是空的 / 一直加载不出来），把 udp_self_elect 设回 true 即可恢复
+      //      "照发一条 ELECT"的旧行为，不用改代码。
+      if (!this.selfElect) {
+        this.log.debug(
+          `[ELECT-SKIP] -> ${entry.addr} player_id=${entry.playerId} ` +
+          `level=0x${levelId.toString(16)} (self 模式：不下发任何关卡数据)`
+        );
+        return;
+      }
+
+      entry.electWriter.forceKeyframe(); // 权威包不能用差分帧（且与 GM_LEVEL_DATA 流分序号空间）
+      const authority = entry.playerId;
+      const selfData = new LevelData(authority, levelId, 0, Buffer.alloc(0), this.defaultLevelHash, 0);
+      const snap = entry.electWriter.generateDelta(selfData.toBytes());
+      this.sendGameMsgTo(entry, GM_LEVEL_DATA_ELECT, snap);
+      this.log.debug(
+        `[ELECT] -> ${entry.addr} player_id=${entry.playerId} level=0x${levelId.toString(16)} authority=self(${authority})`
+      );
+      return;
+    }
+
+    // 下发 NetLevelDataElect：告诉客户端谁是本关卡的权威（host）
+    entry.electWriter.forceKeyframe(); // 权威包不能用差分帧（且与 GM_LEVEL_DATA 流分序号空间）
+
+    let authority = this.levelAuthority.get(levelId);
+    if (authority === undefined || authority === null) {
+      authority = entry.playerId;
+      this.levelAuthority.set(levelId, authority);
+    }
+    let levelData = this.levelsData.get(levelId);
+    if (!levelData) {
+      levelData = new LevelData(authority, levelId, 0, Buffer.alloc(0), this.defaultLevelHash, 0);
+      this.levelsData.set(levelId, levelData);
+    }
+    levelData.electedPlayer = authority;
+
+    const snap = entry.electWriter.generateDelta(levelData.toBytes());
+    this.sendGameMsgTo(entry, GM_LEVEL_DATA_ELECT, snap);
+    this.log.debug(`[ELECT] -> ${entry.addr} player_id=${entry.playerId} level=0x${levelId.toString(16)} authority=${authority}`);
+  }
+
+  handleLevelData(entry, body) {
+    if (body.length < 3) return;
+    // 'self' 模式下人人都是自己的权威：照常回 ack（客户端在等 SNAPSHOT_ACK），
+    // 但**不**把上传的关卡存档广播出去 —— 见 authorityMode 说明。
+    if (this.authorityMode === 'self') {
+      entry.levelReader.applyDelta(body); // 维持解码器窗口，避免客户端重传风暴
+      if (body[0] !== 0) entry.levelAck = body[0];
+      return;
+    }
+    if (this.levelAuthority.get(entry.levelId) !== entry.playerId) return; // 只有权威能发关卡数据
+    const saveSeq = body[0];
+    const raw = entry.levelReader.applyDelta(body);
+    if (raw === null) return;
+    if (saveSeq !== 0) entry.levelAck = saveSeq;
+    const newData = LevelData.fromBytes(raw);
+    if (!newData) return;
+    const cur = this.levelsData.get(entry.levelId);
+    if (!cur) {
+      this.levelsData.set(entry.levelId, newData);
+    } else {
+      cur.update(newData);
+    }
+  }
+
+  handleLevelRevoke(entry) {
+    const levelId = entry.levelId;
+    if (this.levelAuthority.get(levelId) !== entry.playerId) return;
+    this.levelAuthority.delete(levelId);
+    const next = this.peersInLevel(levelId, { exclude: entry.playerId, rawLevel: true })[0];
+    if (next) {
+      this.levelAuthority.set(levelId, next.playerId);
+      const ld = this.levelsData.get(levelId);
+      if (ld) ld.electedPlayer = next.playerId;
+      this.log.info(`[ELECT] 权威 ${entry.playerId} 撤销 → 关卡 0x${(levelId >>> 0).toString(16)} 改选 ${next.playerId}`);
+      this.sendElectTo(next);   // 必须通知，否则新权威客户端不知道自己是 host → 关卡数据断流
+    }
+  }
+
+  syncLevel() {
+    // ★ 'self' 模式：每个人都是自己的权威，服务端**一帧关卡存档都不发**。
+    //   一旦发了，客户端会拿服务端那份空存档重建关卡 → 打坐点/传送门全没、也不能传送。
+    if (this.authorityMode === 'self') return;
+
+    // 权威缺失时补选（旧实现只在"有人进图"时才立权威；权威一走这个关卡就永久没有 host）
+    for (const [levelId] of this.levelsData) {
+      const authority = this.levelAuthority.get(levelId);
+      if (authority === undefined || authority === null) {
+        const first = this.peersInLevel(levelId, { rawLevel: true })[0];
+        if (first) {
+          this.levelAuthority.set(levelId, first.playerId);
+          this.levelsData.get(levelId).electedPlayer = first.playerId;
+          this.log.info(`[ELECT] 关卡 0x${(levelId >>> 0).toString(16)} 无权威 → 补选 ${first.playerId}`);
+          this.sendElectTo(first);
+        }
+      }
+    }
+
+    for (const entry of this.peers.values()) {
+      if (!entry.inGame) continue;
+      const levelId = entry.levelId;
+      const authority = this.levelAuthority.get(levelId);
+      if (authority === undefined || authority === null || authority === entry.playerId) continue;
+      const levelData = this.levelsData.get(levelId);
+      if (!levelData) continue;
+      // ★★ 只转发"权威真正上传过"的关卡存档。在为该关卡拿到真实存档之前
+      //   （data 为空）**绝不发送** —— 服务端凭空造的这份空存档会被客户端当成
+      //   "本关卡的真实状态"应用下去，直接抹掉遇境的传送打坐点/传送门雕像，
+      //   并让同图其他玩家无法被实体化（互相看不见）。
+      //   即：宁可暂时不发，也绝不能发一条空存档。
+      if (levelData.data.length === 0) continue;
+      // ★ 同 PlayerState：关卡数据流也只发 Raw（同一套差分编码器，同一个坑）
+      if (this.stateRawOnly) entry.levelWriter.forceKeyframe();
+      const snap = entry.levelWriter.generateDelta(levelData.toBytes());
+      if (this.debugState && (entry._lvN = (entry._lvN || 0) + 1) <= 40) {
+        this.log.info(
+          `[TX-LV] -> ${entry.addr} pid=${entry.playerId} level=0x${(levelId >>> 0).toString(16)} ` +
+          `dataLen=${levelData.data.length} toBytes=${levelData.toBytes().length} snapLen=${snap.length} ` +
+          `帧头[save=${snap[0]} base=${snap[1]} ck=${snap[2]}] 载荷=${snap.length - 3}B`
+        );
+      }
+      this.sendGameMsgTo(entry, GM_LEVEL_DATA, snap);
+    }
+  }
+
+  handleSnapshotAck(entry, body) {
+    if (body.length < 2) return;
+    if (entry.playerWriter.pendingAck() !== null) entry.playerWriter.ack(body[0]);
+    if (entry.levelWriter.pendingAck() !== null) entry.levelWriter.ack(body[1]);
+  }
+
+  snapshotAckTick() {
+    for (const entry of this.peers.values()) {
+      if (!entry.inGame) continue;
+      const body = Buffer.from([
+        entry.playerAck !== null && entry.playerAck !== undefined ? entry.playerAck : 1,
+        entry.levelAck !== null && entry.levelAck !== undefined ? entry.levelAck : 1,
+      ]);
+      this.sendGameMsgTo(entry, GM_SNAPSHOT_ACK, body);
+    }
+  }
+
+  // ── tick / 生命周期 ──────────────────────────────────────────
+  tick() {
+    try {
+      // ★ p78：每秒扫一次槽位（越界/同房重复就重分配 + 重发名单）
+      const _now = Date.now();
+      if (!this._lastIdFix || _now - this._lastIdFix > 1000) {
+        this._lastIdFix = _now;
+        this.normalizePlayerIds('tick');
+      }
+      this.syncFrame();
+      this.syncLevel();
+      this.snapshotAckTick();
+    } catch (err) {
+      this.log.error(`tick 异常: ${err?.stack || err}`);
+    }
+
+    const now = Date.now();
+    if (now - this._lastCleanup > 10000) {
+      this._lastCleanup = now;
+      for (const [peerId, entry] of [...this.peers.entries()]) {
+        if (now - entry.lastActive > this.clientTimeout * 1000) {
+          this.log.info(`[-] 超时清理 ${entry.addr}`);
+          this.onDisconnect(peerId);
+          entry.disconnectNow();
+        }
+      }
+    }
+
+    // ★ 长跑卫生（对应用户反馈的「开服开久了就连不了机」）：
+    //   一张图没人了就把它缓存的权威/存档/名字一起丢掉，别让这三个 Map 跨天累积。
+    //   真正的"开久连不上"根因是 playerId 曾经只增不减（涨过 8 客户端就拒收），
+    //   那一条见 _allocPlayerId；这里只是补上内存侧的清扫。
+    if (now - this._lastLevelGc > 30000) {
+      this._lastLevelGc = now;
+      for (const levelId of [...this.levelsData.keys()]) {
+        if (this.peersInLevel(levelId).length === 0) {
+          this.levelsData.delete(levelId);
+          this.levelAuthority.delete(levelId);
+          this.levelName.delete(levelId);
+        }
+      }
+      for (const levelId of [...this.levelAuthority.keys()]) {
+        if (this.peersInLevel(levelId).length === 0) this.levelAuthority.delete(levelId);
+      }
+    }
+
+    if (now - this._lastStats > 30000) {
+      this._lastStats = now;
+      const online = [...this.peers.values()].filter(p => p.inGame).length;
+      const levels = new Set([...this.peers.values()].filter(p => p.inGame).map(p => p.levelId)).size;
+      this.log.info(`[统计] 在线 ${online} 人 / ${levels} 个关卡, 收到 ${this.stats.recv}, 转发 ${this.stats.forwarded}`);
+      this.stats.recv = 0;
+      this.stats.forwarded = 0;
+    }
+  }
+
+  startTicking(sendFn) {
+    this._sendFn = sendFn;
+    this._tickTimer = setInterval(() => this.tick(), this._tickIntervalMs);
+    this._tickTimer.unref?.();
+  }
+
+  stopTicking() {
+    if (this._tickTimer) clearInterval(this._tickTimer);
+    this._tickTimer = null;
+  }
+
+  // 供 main.js 传输层发送用
+  sendTo(peerId, channel, data, reliable = true) {
+    if (this._sendFn) {
+      const ok = this._sendFn(peerId, channel, data, reliable);
+      if (ok) this.stats.sent += 1;
+      return ok;
+    }
+    return false;
+  }
+
+  getStats() {
+    return {
+      online: [...this.peers.values()].filter(p => p.inGame).length,
+      connected: this.peers.size,
+      levels: [...new Set([...this.peers.values()].filter(p => p.inGame).map(p => p.levelId))],
+      recv: this.stats.recv,
+      forwarded: this.stats.forwarded,
+      unknownLevel: this.stats.unknownLevel,
+      roomMode: this.roomMode,
+      peers: this.describePeers(),
+    };
+  }
+
+  // 每个连接当前的状态（浏览器里直接打开 /stats 就能核对"谁在哪张图"）
+  describePeers() {
+    const out = [];
+    for (const p of this.peers.values()) {
+      out.push({
+        peer: String(p.peerId),
+        addr: p.addr,
+        playerId: p.playerId,
+        inGame: p.inGame,
+        uuid: this._uuidToAccount(p.uuid) || null,
+        levelId: p.levelId >>> 0,
+        level: `0x${(p.levelId >>> 0).toString(16)}`,
+        room: `0x${(this.roomKey(p.levelId) >>> 0).toString(16)}`,
+        levelName: KNOWN_LEVEL_IDS.get(p.levelId) || (this.levelName.get(p.levelId) || '未知'),
+        levelFrom: p.levelRaw ? `${p.levelRaw.from}@${p.levelRaw.offset}` : null,
+        levelRecognized: p.levelRaw ? !!p.levelRaw.recognized : null,
+        lvSeq: p.lvSeq,
+        magicLen: p.magicLen,
+        authority: this.levelAuthority.get(p.levelId) === p.playerId,
+      });
+    }
+    return out;
+  }
+}
+
+// ── 每个连接的状态 ──────────────────────────────────────────────
+export class PeerEntry {
+  constructor(peerId, addr) {
+    this.peerId = peerId;
+    this.addr = addr;
+    this.playerId = 0; // 0 = 尚未 JoinGame
+    this.uuid = Buffer.alloc(16);
+    this.levelId = 0;
+    this.levelRaw = null;   // 关卡 ID 的归一化过程（排障用）
+    this.lvSeq = 0;
+    this.connMagic = Buffer.alloc(4);
+    this.magicLen = null;   // null=还没判断出连接魔数长度，0/4=已锁定
+    this.txSeq = 0;         // 发给这个连接的下行包序号（[packet_id][seq] 里的 seq）
+    this.stampTxSeq = true; // 由 RoomServer 按 udp_tx_header 决定
+    this.connectedAt = Date.now();
+    this.lastActive = Date.now();
+    this._lastSources = null; // 上一帧参与聚合的玩家集合，用来决定是否强制关键帧
+
+    this.playerReader = new SnapshotReader();
+    this.playerWriter = new SnapshotWriter(true);
+    this.playerRawState = null;
+    this.playerAck = null;
+    // per_player 模式：每个「源玩家」一对独立的出站差分窗口，key = String(源 peerId)
+    // 不用 playerId 做 key —— playerId 会被复用，复用后必须换一条全新的流。
+    this._stateWriters = new Map();
+
+    this.levelReader = new SnapshotReader();
+    // ★ GM_LEVEL_DATA(11) 那条**连续流**专用的差分写入器。
+    //   绝不能和 Elect(8) 共用一个 —— 共用时序号会串在一起，
+    //   客户端那条流的第一个包就是 baseSeq=4 的**差分帧**，它窗口里没有 4 →
+    //     W SnapshotReader: Snapshot could not be read, no keyframe with sequence: 4
+    //   → 触发 resync → 继续解析截断的 NetLevelData → SIGABRT。
+    this.levelWriter = new SnapshotWriter(true);
+    // Elect 是一次性消息，单独一条序号空间。
+    this.electWriter = new SnapshotWriter(true);
+    this.levelAck = null;
+  }
+
+  get inGame() {
+    return this.playerId !== 0;
+  }
+
+  // 取（必要时新建）发往「源玩家 src」这一路的差分写入器。
+  // 新建 = 窗口为空 → 第一帧必然是 Raw 全量帧，客户端能自愈。
+  // 不开启 ack 跟踪：底下是可靠有序的 ENet，而且这个 key 和数据/关卡共用同一套 ack 字段，
+  // 一对多时无法映射；改用每 KEYFRAME_INTERVAL 帧一次关键帧自愈。
+  stateWriterFor(src) {
+    const key = String(src.peerId);
+    let e = this._stateWriters.get(key);
+    if (!e || e.playerId !== src.playerId) {
+      e = { playerId: src.playerId, writer: new SnapshotWriter(false) };
+      this._stateWriters.set(key, e);
+    }
+    return e.writer;
+  }
+
+  dropStateWriter(peerId) {
+    this._stateWriters.delete(String(peerId));
+  }
+
+  dropAllStateWriters() {
+    this._stateWriters.clear();
+  }
+
+  setSendFn(fn) {
+    this._sendFn = fn;
+  }
+
+  setDisconnectFn(fn) {
+    this._disconnectFn = fn;
+  }
+
+  send(channel, data, reliable = true) {
+    if (!data || data.length === 0) return false;
+    // ★ 每个连接一个独立的发送序号，逐包 +1（和客户端上行完全对称）。
+    //   必须在这里就地盖号：同一条广播包会发给多个 peer，序号是"每连接"的，
+    //   不能在 buildPacket 时定死。
+    if (this.stampTxSeq && data.length >= 2) data[1] = this._nextTxSeq();
+    if (this.debugTx && this.log) {
+      // 排障：带上毫秒 + 小包全量 hex（大包只给前 64B），用来和真机崩溃时刻对齐
+      const ms = new Date().toISOString().slice(11, 23);
+      const hex = data.length <= 200 ? data.toString('hex') : `${data.subarray(0, 64).toString('hex')}…`;
+      this.log.info(`[TX ${ms}] -> ${this.addr} id=${data[0]} ch=${channel} len=${data.length} ${hex}`);
+    }
+    if (this._sendFn) return this._sendFn(this.peerId, channel, data, reliable);
+    return false;
+  }
+
+  _nextTxSeq() {
+    this.txSeq = ((this.txSeq ?? 0) + 1) & 0xFF;
+    return this.txSeq;
+  }
+
+  disconnectNow() {
+    if (this._disconnectFn) this._disconnectFn(this.peerId);
+  }
+}

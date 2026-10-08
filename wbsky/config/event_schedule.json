@@ -1,0 +1,43 @@
+{
+  "event_schedule": {
+    "valid_until": 2147483648,
+    "base_time": 1587366000,
+    "events": [
+      {
+        "duration": "99999999",
+        "when": [
+          165715200
+        ],
+        "name": "season_02"
+      },
+      {
+        "duration": "99999999",
+        "when": [
+          165715200
+        ],
+        "name": "season_02_week_01"
+      },
+      {
+        "duration": "99999999",
+        "when": [
+          165715200
+        ],
+        "name": "season_02_week_02"
+      },
+      {
+        "duration": "99999999",
+        "when": [
+          165715200
+        ],
+        "name": "season_02_week_03"
+      },
+      {
+        "duration": "99999999",
+        "when": [
+          165715200
+        ],
+        "name": "season_02_week_04"
+      }
+    ]
+  }
+}

@@ -1,0 +1,56 @@
+# ============================================================================
+# 【已弃用 · 仅作参考】wbsky 目录下这份 compose 是**早期版本**，请勿使用。
+# ----------------------------------------------------------------------------
+# 它有三个问题：
+#   1) 没有联机房间服（sky0155-udp）—— 只有主服务 + 聊天 WS，
+#      用它起出来的服务器玩家进图看不到人。
+#   2) 没有数据库配置：容器里连不上 MySQL，只能退回 SQLite 空库。
+#   3) 容器名是 wbsky-server / 服务名是 server，而 nginx 配置里写的是容器名
+#      server:2999 —— 这两套名字只在同一个 compose 网络内有效，
+#      放到 1Panel 的 OpenResty（独立容器）里用会 502。
+#   4) 每次都 pip install 装依赖，启动慢且不稳定。
+#
+# ★ 请使用项目根目录下的这一份（含全部三个服务 + .env 一处配置）：
+#     deploy/docker-compose.yml
+#     docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
+#   或者直接： bash deploy/up.sh
+# ============================================================================
+
+services:
+  server:
+    image: python:3.10-slim
+    container_name: wbsky-server
+    restart: unless-stopped
+    working_dir: /app
+    ports:
+      - "2999:2999/tcp"
+    volumes:
+      - ./:/app
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: bash -c "pip install --no-cache-dir flask pymysql requests && python -u index.py"
+    environment:
+      - TZ=Asia/Shanghai
+    networks:
+      - sky-net
+
+  ws:
+    image: python:3.10-slim
+    container_name: wbsky-ws
+    restart: unless-stopped
+    working_dir: /app
+    ports:
+      - "9002:9002/tcp"
+    volumes:
+      - ./:/app
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: bash -c "python -u ws_server.py 9002"
+    environment:
+      - TZ=Asia/Shanghai
+    networks:
+      - sky-net
+
+networks:
+  sky-net:
+    driver: bridge

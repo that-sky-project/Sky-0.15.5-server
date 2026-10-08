@@ -1,0 +1,35 @@
+# =====================================================================
+# wbsky 服务端 Python 依赖
+# ---------------------------------------------------------------------
+# ⚠️ 改动本文件后**必须重建镜像**：
+#     docker compose -f deploy/docker-compose.yml build --no-cache wbsky
+#     docker compose -f deploy/docker-compose.yml up -d
+#   `up -d` 不会自动 rebuild。老包踩过的坑就是"改了 requirements 没重建，
+#   启动时报 ModuleNotFoundError: No module named 'pymysql'"，而报错栈出现在
+#   数据库连接阶段，第一眼看着像网络问题。
+#
+# 版本按现网实测环境钉（VERSIONS.txt 里的 pip freeze，Python 3.10.12）：
+#   Flask 3.1.3 / PyMySQL 1.2.3 / requests 2.34.2
+#   werkzeug 由 Flask 自行决定，**不要**在这里钉死版本，
+#   否则很容易和 Flask 3.1.x 的 Werkzeug>=3.1 约束冲突（ResolutionImpossible）。
+# =====================================================================
+
+# --- Web 框架（wbsky/index.py）---
+Flask==3.1.3
+
+# --- MySQL 驱动（wbsky/db.py 的 pymysql 分支）---
+PyMySQL==1.2.3
+
+# --- MySQL 8 认证必需 ---
+# MySQL 8.0 起的默认认证插件是 caching_sha2_password，PyMySQL 走这种认证
+# **必须**有 cryptography，否则连接阶段会抛
+#     'cryptography' package is required for sha256_password or
+#      caching_sha2_password auth methods
+# 这条报错长得像网络/密码问题，实际只是缺库，很容易查错方向；
+# 而且 MariaDB 默认还是 mysql_native_password，本地根本测不出来。直接装上省事。
+cryptography>=42.0.0
+
+# --- 出网请求（index.py 的 requests）---
+requests==2.34.2
+
+# --- ws_server.py 只用标准库（socket/hashlib/struct），无需额外依赖 ---

@@ -1,0 +1,28 @@
+# Sky 0.15.5 Level IDs (build 179644 Android / 179535 iOS / 179482 Switch)
+# level_id = FNV-1a-32(map_codename)
+# 已验证: FNV-1a("Dawn")=1649439303, FNV-1a("CandleSpace")=3526133726
+
+# 出生点: HubReveal (遇境枢纽)
+2018906977 遇境枢纽 (HubReveal) - FNV-1a("HubReveal") [出生点]
+
+# 已验证 Level IDs (FNV-1a 匹配)
+1649439303 晨岛 (Dawn / Isle) - FNV-1a("Dawn")
+3526133726 遇境 (Home / CandleSpace) - FNV-1a("CandleSpace")
+2825107789 遇境别名 (SkyHub2) - FNV-1a("SkyHub2") [与 CandleSpace 同图]
+748712866 试炼洞窟 (DawnCave) - FNV-1a("DawnCave")
+2394719185 八人门洞穴 (DayHubCave) - FNV-1a("DayHubCave")
+
+# 旧版/其他 IDs (同时下发确保兼容)
+1649439403 晨岛旧版 (Dawn old)
+3265870096 云野 (Prairie / Day) [旧]
+927037567 云野 (Prairie) - FNV-1a("Prairie")
+2889552629 雨林 (Forest / Rain) [旧]
+164626931 雨林 (Rain) - FNV-1a("Rain")
+1007551460 霞谷 (Valley / Sunset) [旧]
+1638008359 霞谷 (Sunset) - FNV-1a("Sunset")
+
+# 以下关卡的 level_id 未知，客户端进入时会调用 set_checkpoint
+# set_checkpoint 始终返回 16 个 True 状态
+# Wasteland/Dusk: DuskStart, Dusk, DuskGraveyard, DuskMid, DuskEnd
+# Vault/Night: Night, Night2, NightEnd
+# Eden/Storm: StormStart, Storm, StormEnd

@@ -1,0 +1,18 @@
+{
+      "payload": {
+        "headers": {
+          "id": "687c74f68c0bf4224a0f9a9a",
+          "type": "update",
+          "from": "44e9f7e2-c9fb-4328-87d4-3544221856ce",
+          "sent_at": 1752986870,
+          "expires_at": 1799999999
+        },
+        "subject": "This is a Test Message",
+        "body": "This a Test Massages for Mail System.\n\nWe trying add the dynamic messages in System.\n\nIf you see this messages,server are success loaded the mail_and_massage.",
+        "properties": {
+          "HasCurrencies": false,
+          "HasLinks": false,
+          "HasUnlocks": false
+        }
+      }
+    }

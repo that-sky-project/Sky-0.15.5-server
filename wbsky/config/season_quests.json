@@ -1,0 +1,46 @@
+{
+  "season_quests": [
+    {
+      "daily_quest_def_id": "express_an_emote_to_a_friend",
+      "stat_type": "express_an_emote_to_a_friend_count",
+      "start_value": -1.0,
+      "activated": true
+    },
+    {
+      "daily_quest_def_id": "activate_an_engine",
+      "stat_type": "activate_an_engine_count",
+      "start_value": -1.0,
+      "activated": true
+    },
+    {
+      "daily_quest_def_id": "bow_at_a_player",
+      "stat_type": "bow_at_a_player_count",
+      "start_value": -1.0,
+      "activated": true
+    },
+    {
+      "daily_quest_def_id": "forge_a_candle",
+      "stat_type": "forge_a_candle_count",
+      "start_value": -1.0,
+      "activated": true
+    }
+  ],
+  "has_season_quests_rewards": [
+    {
+      "daily_quest_def_id": "express_an_emote_to_a_friend",
+      "rewarded": false
+    },
+    {
+      "daily_quest_def_id": "activate_an_engine",
+      "rewarded": false
+    },
+    {
+      "daily_quest_def_id": "bow_at_a_player",
+      "rewarded": false
+    },
+    {
+      "daily_quest_def_id": "forge_a_candle",
+      "rewarded": false
+    }
+  ]
+}

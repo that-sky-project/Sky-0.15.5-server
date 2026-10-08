@@ -1,0 +1,15 @@
+{
+    "forge_rates": [
+        {
+            "source_type": "wax",
+            "current_tier": 26,
+            "current_level": 4,
+            "tier_completion": 0.0,
+            "level_completion": 0.0,
+            "level_tier_index": 0,
+            "level_tier_count": 5,
+            "reset_acknowledged": false,
+            "enabled": true
+        }
+    ]
+}

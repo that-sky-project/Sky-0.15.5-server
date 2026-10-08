@@ -1,0 +1,230 @@
+{
+    "level": 3526133726,
+    "pickups": [],
+    "global_pickups": [],
+    "pickup_emitters": [
+        {
+            "emitter_name": "CandlespaceBlizz",
+            "events": [
+                {
+                    "preactive_duration": 0,
+                    "pool_name": "social_blizzard",
+                    "pool_amount": 1000,
+                    "last_chunk_seq": -1,
+                    "event_name": "social_blizz_sm",
+                    "emit_interval": 6,
+                    "currency_type": "wax",
+                    "collected": 0,
+                    "chunks_per_emit": 1,
+                    "chunk_size_likelihood": [
+                        1.0,
+                        0.0,
+                        0.0
+                    ],
+                    "chunk_size_amount": [
+                        1,
+                        0,
+                        0
+                    ],
+                    "active_duration": 1439
+                },
+                {
+                    "preactive_duration": 0,
+                    "pool_name": "social_blizzard",
+                    "pool_amount": 1000,
+                    "last_chunk_seq": -1,
+                    "event_name": "social_blizz_lg",
+                    "emit_interval": 4,
+                    "currency_type": "wax",
+                    "collected": 0,
+                    "chunks_per_emit": 1,
+                    "chunk_size_likelihood": [
+                        1.0,
+                        0.0,
+                        0.0
+                    ],
+                    "chunk_size_amount": [
+                        1,
+                        0,
+                        0
+                    ],
+                    "active_duration": 1439
+                }
+            ]
+        },
+        {
+            "emitter_name": "CandlespaceSnowHutFire",
+            "events": [
+                {
+                    "preactive_duration": 0,
+                    "pool_name": "social_blizzard",
+                    "pool_amount": 1000,
+                    "last_chunk_seq": -1,
+                    "event_name": "social_snowhutfire_sm",
+                    "emit_interval": 6,
+                    "currency_type": "wax",
+                    "collected": 0,
+                    "chunks_per_emit": 1,
+                    "chunk_size_likelihood": [
+                        1.0,
+                        0.0,
+                        0.0
+                    ],
+                    "chunk_size_amount": [
+                        1,
+                        0,
+                        0
+                    ],
+                    "active_duration": 1439
+                },
+                {
+                    "preactive_duration": 0,
+                    "pool_name": "social_blizzard",
+                    "pool_amount": 1000,
+                    "last_chunk_seq": -1,
+                    "event_name": "social_snowhutfire_lg",
+                    "emit_interval": 4,
+                    "currency_type": "wax",
+                    "collected": 0,
+                    "chunks_per_emit": 1,
+                    "chunk_size_likelihood": [
+                        1.0,
+                        0.0,
+                        0.0
+                    ],
+                    "chunk_size_amount": [
+                        1,
+                        0,
+                        0
+                    ],
+                    "active_duration": 1439
+                }
+            ]
+        },
+        {
+            "emitter_name": "RainbowEvent",
+            "events": [
+                {
+                    "preactive_duration": 0,
+                    "pool_name": "event_rainbow",
+                    "pool_amount": 500,
+                    "last_chunk_seq": -1,
+                    "event_name": "social_rainbow_on",
+                    "emit_interval": 6,
+                    "currency_type": "wax",
+                    "collected": 0,
+                    "chunks_per_emit": 2,
+                    "chunk_size_likelihood": [
+                        1.0,
+                        0.0,
+                        0.0
+                    ],
+                    "chunk_size_amount": [
+                        1,
+                        0,
+                        0
+                    ],
+                    "active_duration": 20160
+                }
+            ]
+        },
+        {
+            "emitter_name": "SakuraEmitterBlooming",
+            "events": [
+                {
+                    "preactive_duration": 0,
+                    "pool_name": "event_bloom_2022",
+                    "pool_amount": 1000,
+                    "last_chunk_seq": -1,
+                    "event_name": "global_bloom_sakura_bloom_wax02",
+                    "emit_interval": 12,
+                    "currency_type": "wax",
+                    "collected": 0,
+                    "chunks_per_emit": 1,
+                    "chunk_size_likelihood": [
+                        1.0,
+                        0.0,
+                        0.0
+                    ],
+                    "chunk_size_amount": [
+                        1,
+                        0,
+                        0
+                    ],
+                    "active_duration": 4320
+                },
+                {
+                    "preactive_duration": 0,
+                    "pool_name": "event_bloom_2022",
+                    "pool_amount": 1000,
+                    "last_chunk_seq": -1,
+                    "event_name": "global_bloom_sakura_bloom_wax01",
+                    "emit_interval": 36,
+                    "currency_type": "wax",
+                    "collected": 0,
+                    "chunks_per_emit": 1,
+                    "chunk_size_likelihood": [
+                        1.0,
+                        0.0,
+                        0.0
+                    ],
+                    "chunk_size_amount": [
+                        1,
+                        0,
+                        0
+                    ],
+                    "active_duration": 4320
+                }
+            ]
+        },
+        {
+            "emitter_name": "SakuraEmitterFalling",
+            "events": [
+                {
+                    "preactive_duration": 0,
+                    "pool_name": "event_bloom_2022",
+                    "pool_amount": 1000,
+                    "last_chunk_seq": -1,
+                    "event_name": "global_bloom_sakura_fall_wax02",
+                    "emit_interval": 6,
+                    "currency_type": "wax",
+                    "collected": 0,
+                    "chunks_per_emit": 1,
+                    "chunk_size_likelihood": [
+                        1.0,
+                        0.0,
+                        0.0
+                    ],
+                    "chunk_size_amount": [
+                        1,
+                        0,
+                        0
+                    ],
+                    "active_duration": 8640
+                },
+                {
+                    "preactive_duration": 0,
+                    "pool_name": "event_bloom_2022",
+                    "pool_amount": 1000,
+                    "last_chunk_seq": -1,
+                    "event_name": "global_bloom_sakura_fall_wax01",
+                    "emit_interval": 9,
+                    "currency_type": "wax",
+                    "collected": 0,
+                    "chunks_per_emit": 1,
+                    "chunk_size_likelihood": [
+                        1.0,
+                        0.0,
+                        0.0
+                    ],
+                    "chunk_size_amount": [
+                        1,
+                        0,
+                        0
+                    ],
+                    "active_duration": 4320
+                }
+            ]
+        }
+    ]
+}

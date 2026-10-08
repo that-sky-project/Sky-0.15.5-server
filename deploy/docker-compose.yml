@@ -1,0 +1,268 @@
+# =====================================================================
+# 光遇私服 wbsky · Docker / 1Panel 部署编排
+# =====================================================================
+# 用法（在宿主机项目根目录，例如 /opt/1panel/apps/skywb）：
+#
+#   docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
+#
+# 三个容器 = 老包里的三个进程，一一对应，不多不少：
+#   wbsky  原 supervisor 的 wbsky-server  → Flask index.py   2007/tcp
+#   udp    原 supervisor 的 sky0155-udp   → Node 房间服      19458/udp
+#   ws     原 supervisor 的 wbsky-ws      → 聊天 WS 中继      2500/tcp
+#
+# ---------------------------------------------------------------------
+# 端口（这是整个部署最要紧的地方）
+# ---------------------------------------------------------------------
+#   HTTPS_PORT  2007/tcp   主服务：全部游戏 API（客户端 + /live + /admin 面板）
+#   UDP_PORT    19458/udp  联机房间服。**纯 UDP，不能走 1Panel 的 HTTP 反代**，
+#                          只能靠 docker 端口映射 + 云安全组放行。
+#   WS_PORT     2500/tcp   聊天 WebSocket。也可以不对外暴露，
+#                          让 nginx 把 /account/ws 反代到容器（推荐，见 deploy/nginx/）。
+#   STATS_PORT  11925/tcp  **只绑 127.0.0.1**：房间服的 /health 与 /stats，
+#                          给面板和排障用，不给公网。
+#
+# ---------------------------------------------------------------------
+# 三个刻意的设计决定（都是踩坑换来的，别"优化"回去）
+# ---------------------------------------------------------------------
+# 1) 只写 build、不写 image
+#    写了 `image: xxx` 时，1Panel 的编排会优先去 Docker Hub「拉取」而不是
+#    本地「构建」，报 pull access denied。去掉后只能构建。
+#
+# 2) 不用 entrypoint.sh 的默认分支，直接在 compose 里写 command
+#    本编排把项目目录挂到 /app，会覆盖镜像里 chmod +x 的结果；宿主机上的
+#    文件通常没有可执行位（从 Windows 拷过去的），于是容器直接报
+#        exec: "/app/deploy/entrypoint.sh": permission denied
+#    所以这里显式写 command: ["server"] / ["ws"]，而 entrypoint.sh 里也
+#    做了直通兼容（command 写 python … 时原样执行）。
+#    真遇到 permission denied 时的一条命令兜底：
+#        chmod +x deploy/entrypoint.sh
+#
+# 3) restart 用 on-failure:3，不用 unless-stopped
+#    一旦启动失败（缺依赖 / 连不上库），unless-stopped 会无限重启；
+#    失败 3 次就停，CPU 立刻回落，日志里也能看到明确的失败原因。
+#
+# ---------------------------------------------------------------------
+# 关于 .env
+# ---------------------------------------------------------------------
+# 包内已附 deploy/.env（开箱即用）。这里用最简单的 `- ./deploy/.env` 写法，
+# 不用新版 Compose 才支持的 {path: .env, required: false}（后者要求
+# Docker Compose >= 2.24，1Panel 自带的版本未必够新）。
+# 若误删了：cp deploy/.env.example deploy/.env
+# =====================================================================
+
+services:
+  # -------------------------------------------------------------------
+  # 主服务：Flask 全部游戏 API + 实时面板 + 客户端更新接口
+  # -------------------------------------------------------------------
+  wbsky:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: skywb-wbsky:latest
+    container_name: wbsky
+    restart: on-failure:3
+    working_dir: /app
+    command: ["server"]
+    env_file:
+      # ⚠️ 相对路径是相对**本 compose 文件所在目录**（deploy/）解析的，
+      #    所以这里写 .env，不能写 deploy/.env（那会变成 deploy/deploy/.env）。
+      - .env
+    environment:
+      TZ: Asia/Shanghai
+      APP_DIR: /app
+      # 让 deploy/sitecustomize.py 在解释器启动阶段被自动加载
+      PYTHONPATH: /app/deploy
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      # 显式绑 IPv4 全接口
+      WB_SKY_BIND: "${WB_SKY_BIND:-0.0.0.0}"
+      # 容器内端口固定，要换对外端口只改 .env 的 HTTPS_PORT
+      WB_SKY_HTTP_PORT: "2007"
+      # 房间服地址（下发给客户端的联机地址）。
+      # host 必须是**公网 IPv4**（不是域名，客户端实时层会断言崩溃）；
+      # 值来自 .env 的 WB_SKY_UDP_HOST（env_file 已把它注入容器，
+      # 这里不重复写，避免两处来源不一致）。
+      # 端口 = 宿主侧映射出去的那个，也就是 .env 的 UDP_PORT；
+      # 房间服在另一个容器里，服务名是 udp。
+      WB_SKY_UDP_PORT: "${UDP_PORT:-19458}"
+      # 面板读房间服状态用（容器内直连 udp 服务的 11925）
+      WB_SKY_UDP_STATS_URL: "http://udp:11925/stats"
+      # 聊天 outbox：与 ws 容器共享同一份 logs/ 目录，必须指向同一个绝对路径
+      WB_SKY_WS_OUTBOX: "/app/wbsky/logs/ws_outbox.jsonl"
+      # 面板口令（.env 里改，源码里的硬编码值不再生效）
+      WB_SKY_LIVE_USER: "${WB_SKY_LIVE_USER:-admin}"
+      WB_SKY_LIVE_PASSWORD: "${WB_SKY_LIVE_PASSWORD:-admin123}"
+      # 数据库
+      WB_SKY_USE_MYSQL: "${WB_SKY_USE_MYSQL:-1}"
+      MYSQL_HOST: "${MYSQL_HOST:-host.docker.internal}"
+      MYSQL_PORT: "${MYSQL_PORT:-3306}"
+      MYSQL_USER: "${MYSQL_USER:-wbsky}"
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD:-CHANGE_ME}"
+      MYSQL_DATABASE: "${MYSQL_DATABASE:-skygame}"
+      MYSQL_CHARSET: "${MYSQL_CHARSET:-utf8mb4}"
+      # 连不上库时不要整个服务崩掉（重试 3 次后只记日志继续跑）
+      WB_SKY_SCHEMA_RESILIENT: "${WB_SKY_SCHEMA_RESILIENT:-1}"
+      WB_SKY_DB_RETRY: "${WB_SKY_DB_RETRY:-3}"
+      # 启动自检用：.env 下发的房间服端口（不一致会打醒目告警）
+      WB_SKY_EXPECT_UDP_PORT: "${UDP_PORT:-19458}"
+    ports:
+      - "${HTTPS_PORT:-2007}:2007/tcp"
+    volumes:
+      # 整个项目目录挂进 /app：
+      #   config.json / config/（后台改的配置）/ logs/ / db/users.db 都在宿主机上，
+      #   备份只要 tar 这一个目录。
+      - ..:/app
+    extra_hosts:
+      # 让容器里的 host.docker.internal 指向宿主机。
+      # 1Panel 的 MySQL 是**单独装的应用容器**，把 3306 映射到了宿主机上；
+      # 本容器的 MYSQL_HOST 默认就是 host.docker.internal，靠这条才能解析。
+      # （Linux 上 Docker 20.10+ 支持 host-gateway；不加这行容器里这个域名不存在。）
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      # 本服务是**全部 POST** 的游戏 API，用 "/" 或业务路由探活都会被判成
+      # 404/405（老包踩过）。这里用 index.py 专门注册的 GET /healthz，
+      # 恒返回 200（数据库状态在 JSON 里，见 index.py 注释）。
+      # 证书是自签 → curl 带 -k；没放证书时容器跑明文 HTTP，两种都试。
+      test: ["CMD-SHELL", "curl -kfsS -o /dev/null https://127.0.0.1:2007/healthz 2>/dev/null || curl -fsS -o /dev/null http://127.0.0.1:2007/healthz 2>/dev/null || exit 1"]
+      interval: 30s
+      timeout: 8s
+      start_period: 60s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # -------------------------------------------------------------------
+  # 联机房间服：Node 版 sky0155-udp（ENet / UDP）
+  # -------------------------------------------------------------------
+  udp:
+    # ⚠️ 必须用 **node:20**（不能用 node:20-slim）：
+    #    sky-enet 是原生模块；虽然它用 prebuildify 带了 napi 预编译，
+    #    但一旦没有匹配的预编译（换 Node 大版本 / 换架构），就要现场
+    #    node-gyp 编译，需要 python3 + make + g++，只有完整版镜像才有。
+    image: node:20
+    container_name: wbsky-udp
+    restart: on-failure:3
+    working_dir: /app/sky0155-udp
+    # ── 依赖自举 ────────────────────────────────────────────────────────
+    # 【这里踩过一个坑，别再改回去】
+    #   原来的写法是：
+    #       [ -d node_modules ] || npm install …; exec node src/main.js
+    #   `-d node_modules` 只判断**目录存在**。而下面 volumes 里把
+    #   ../sky0155-udp/node_modules 挂进容器时，**Docker 会在宿主机上自动创建
+    #   这个空目录** —— 于是第一次启动判断就为真、npm install 被跳过，
+    #   紧接着 exec node 报：
+    #       Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'sky-enet'
+    #   然后被 restart 策略反复拉起来，日志刷成一片崩溃栈。
+    #   现在改成判断**真正的包**在不在（node_modules/sky-enet/package.json）。
+    #
+    #   另外：npm install 失败时不要再 exec node（那只会刷同样的栈），
+    #   直接打印原因并以非 0 退出 —— restart: on-failure:3 会试够 3 次就停。
+    command:
+      - sh
+      - -lc
+      - |
+        if [ ! -f node_modules/sky-enet/package.json ]; then
+          echo "[udp] 首次启动：安装依赖（sky-enet 是原生模块，可能要几分钟）..."
+          # 目录不存在 / 或只装了一半，都让 npm 按 package-lock 补齐（幂等）
+          npm install --omit=dev --no-audit --no-fund || true
+          if [ ! -f node_modules/sky-enet/package.json ]; then
+            echo "[udp] ================= 依赖安装失败，不启动 ================="
+            echo "[udp] 缺 node_modules/sky-enet —— 房间服起不来，联机一定连不上。"
+            echo "[udp] 常见原因与修法："
+            echo "[udp]   1) npm 源不通：docker compose ... run --rm udp npm config get registry"
+            echo "[udp]      换源：把 sky0155-udp/.npmrc 的 registry 改成"
+            echo "[udp]            https://registry.npmjs.org  或你内网的私服"
+            echo "[udp]   2) 需要现场编译但缺工具链：本服务必须用 node:20 **完整版**"
+            echo "[udp]      （node:20-slim 里没有 python3/make/g++）"
+            echo "[udp]   3) 宿主机 sky0155-udp/node_modules 是坏的半成品："
+            echo "[udp]        rm -rf sky0155-udp/node_modules 然后重新 up"
+            echo "[udp]   4) 部署前想先看到编译日志：bash deploy/build-udp-node.sh"
+            echo "[udp] ==========================================================="
+            exit 1
+          fi
+        fi
+        exec node src/main.js
+    environment:
+      TZ: Asia/Shanghai
+      NODE_ENV: production
+      # npm 源（容器首次启动装依赖时用；平时也由 sky0155-udp/.npmrc 兜底）
+      npm_config_registry: "${NPM_REGISTRY:-https://registry.npmmirror.com}"
+      # ★ 房间服真正 listen 的端口（覆盖 sky0155-udp/config.json）
+      WB_SKY_UDP_PORT: "${UDP_PORT:-19458}"
+      WB_SKY_UDP_HOST: "0.0.0.0"
+      # /health 与 /stats 的容器内端口（与 UDP 端口分开，见 main.js 注释）
+      WB_SKY_UDP_HTTP_PORT: "11925"
+      # ★ 房间服回连 Flask 用（p94 的 /internal/rtt 探测、ensureFriendship 兜底调
+      #   /account/give_candle）。原来是写死的 127.0.0.1:2999 —— 容器里那指的是
+      #   房间服自己，本来就调不通；现在走服务名 + 内部端口，端口随主服务改成 2007。
+      WB_SKY_API_BASE: "http://wbsky:2007"
+    ports:
+      # 联机端口。宿主机侧 = .env 的 UDP_PORT，容器内 = 19458。
+      # ★ 只映射**一个** UDP 端口：本房间服是"一图一房"（同一端口内按关卡
+      #   分组），不是一房一端口，所以不需要端口段。
+      - "${UDP_PORT:-19458}:19458/udp"
+      # 房间服 /health（排障用）。只绑本机回环，不给公网。
+      - "127.0.0.1:${STATS_PORT:-11925}:11925/tcp"
+    volumes:
+      - ..:/app
+      # ★ 原生依赖的编译结果留在**宿主机**：只编一次、重建不重编；
+      #   换服务器时把这个目录一起拷过去即可（同架构 + 同 Node 大版本）。
+      - ../sky0155-udp/node_modules:/app/sky0155-udp/node_modules
+    healthcheck:
+      # node:20 镜像里自带 node，用它自己的 fetch 探活，不依赖 curl
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:11925/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 6s
+      start_period: 120s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # -------------------------------------------------------------------
+  # 聊天 WebSocket 中继：wbsky/ws_server.py（纯标准库，2500）
+  #   Flask 的 /account/chat/send 把要广播的帧写进 logs/ws_outbox.jsonl，
+  #   本进程 tail 这个文件再广播给所有已连接的客户端（老包的跨进程总线）。
+  #   ★ 两个容器必须挂同一个项目目录，outbox 路径才对得上 —— 这是
+  #     "聊天发出去自己都看不到"的根因。
+  # -------------------------------------------------------------------
+  ws:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: skywb-wbsky:latest
+    container_name: wbsky-ws
+    restart: on-failure:3
+    working_dir: /app/wbsky
+    command: ["ws"]
+    env_file:
+      # 相对路径相对本文件所在目录（deploy/），所以是 .env
+      - .env
+    environment:
+      TZ: Asia/Shanghai
+      APP_DIR: /app
+      PYTHONPATH: /app/deploy
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      WB_SKY_WS_PORT_INTERNAL: "2500"
+    ports:
+      - "${WS_PORT:-2500}:2500/tcp"
+    volumes:
+      - ..:/app
+    healthcheck:
+      # ws_server.py 不做 HTTP，纯 TCP；能建连就算活着
+      test: ["CMD-SHELL", "python -c \"import socket;s=socket.create_connection(('127.0.0.1',2500),3);s.close()\""]
+      interval: 30s
+      timeout: 6s
+      start_period: 20s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

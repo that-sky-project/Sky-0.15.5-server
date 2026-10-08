@@ -1,0 +1,11 @@
+[Unit]
+Description=sky0155-udp ENet room server
+After=network.target
+[Service]
+Type=simple
+WorkingDirectory=/opt/sky0155-udp
+ExecStart=/usr/local/bin/node src/main.js
+Restart=always
+RestartSec=2
+[Install]
+WantedBy=multi-user.target

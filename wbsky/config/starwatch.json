@@ -1,0 +1,28 @@
+{
+    "starwatch": [
+        {
+            "type": "field",
+            "msg": "Invalid value",
+            "path": "apiKey",
+            "location": "body"
+        },
+        {
+            "type": "field",
+            "msg": "Invalid value",
+            "path": "apiKey",
+            "location": "body"
+        },
+        {
+            "type": "field",
+            "msg": "Invalid value",
+            "path": "appKey",
+            "location": "body"
+        },
+        {
+            "type": "field",
+            "msg": "Invalid value",
+            "path": "appKey",
+            "location": "body"
+        }
+    ]
+}

@@ -1,0 +1,19 @@
+{
+  "name": "sky0155-udp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Sky: CotL 0.15.5 (Light Awaits) ENet UDP room server, Node.js port",
+  "scripts": {
+    "start": "node src/main.js",
+    "sim": "node test/room-sim.mjs",
+    "selftest": "node selftest.mjs",
+    "check": "node --check src/main.js && node --check src/server.js && node --check src/protocol.js && node --check src/snapshot.js && node --check src/leveldata.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "sky-enet": "^0.1.5"
+  }
+}

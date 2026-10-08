@@ -1,0 +1,117 @@
+{
+  "_comment": "空巢(SkyHub2)所有门需要的关卡。由 SkyHub2/Objects.level.bin 反汇编得到：门=ChangeLevelWithFade 的目标，门禁=HasReachedLevel 的 levelName。server 的 _hub_gate_levels() 会把这些 level_id 全部放进 /account/get_checkpoints，客户端据此认为'到过这张图'，风墙消失。增删直接改这里，不需要动代码。",
+  "hub_gates": [
+    {
+      "name": "CandleSpaceEnd",
+      "id": 2251284635
+    },
+    {
+      "name": "Dawn",
+      "id": 1649439303
+    },
+    {
+      "name": "Day",
+      "id": 1230250653
+    },
+    {
+      "name": "DayEnd",
+      "id": 1190972738
+    },
+    {
+      "name": "DayHubCave",
+      "id": 2394719185
+    },
+    {
+      "name": "DayHubMid",
+      "id": 3533582502
+    },
+    {
+      "name": "Dusk",
+      "id": 1147491976
+    },
+    {
+      "name": "DuskEnd",
+      "id": 4158956653
+    },
+    {
+      "name": "DuskGraveyard",
+      "id": 864432821
+    },
+    {
+      "name": "DuskMid",
+      "id": 1597085778
+    },
+    {
+      "name": "DuskStart",
+      "id": 817373972
+    },
+    {
+      "name": "HubReveal",
+      "id": 2018906977
+    },
+    {
+      "name": "Night",
+      "id": 2358907137
+    },
+    {
+      "name": "Night2",
+      "id": 2307461961
+    },
+    {
+      "name": "NightEnd",
+      "id": 2267185542
+    },
+    {
+      "name": "Rain",
+      "id": 164626931
+    },
+    {
+      "name": "RainEnd",
+      "id": 128844448
+    },
+    {
+      "name": "RainForest",
+      "id": 2839585646
+    },
+    {
+      "name": "RainMid",
+      "id": 2159642775
+    },
+    {
+      "name": "Storm",
+      "id": 1705189686
+    },
+    {
+      "name": "StormEnd",
+      "id": 3479786579
+    },
+    {
+      "name": "StormStart",
+      "id": 3110721718
+    },
+    {
+      "name": "Sunset",
+      "id": 1638008359
+    },
+    {
+      "name": "SunsetColosseum",
+      "id": 263580627
+    },
+    {
+      "name": "SunsetEnd",
+      "id": 2360310676
+    },
+    {
+      "name": "SunsetEnd2",
+      "id": 507487826
+    },
+    {
+      "name": "SunsetRace",
+      "id": 571720490
+    },
+    {
+      "name": "SunsetVillage",
+      "id": 1759178769
+    }
+  ]
+}

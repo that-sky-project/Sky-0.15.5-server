@@ -1,0 +1,6 @@
+{
+  "send_welcome": true,
+  "relay_incoming": true,
+  "broadcast_outbox": true,
+  "log_frames": true
+}

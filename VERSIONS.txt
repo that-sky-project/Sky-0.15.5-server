@@ -1,0 +1,98 @@
+# 版本信息
+# =====================================================================
+# 本文件分两段：
+#   第 1 段 = 本包（skywb-docker-v18）会给你建成什么样
+#   第 2 段 = 老机器当时的实测快照（换机器时"现在到底是什么版本"的依据）
+# =====================================================================
+
+## ============ 第 1 段：本包的目标环境 ============
+## 部署方式
+#   Docker Compose（deploy/docker-compose.yml），三个容器：
+#     wbsky       主服务 Flask index.py
+#     wbsky-udp   联机房间服 Node sky0155-udp
+#     wbsky-ws    聊天 WS 中继 ws_server.py
+#   配置入口只有一个：deploy/.env
+
+## 镜像
+python:3.10-slim          # 主服务 + 聊天 WS（与老机器 Python 3.10.12 对齐）
+node:20                   # 房间服（必须完整版，sky-enet 要现场 node-gyp 编译）
+
+## Python 依赖（deploy/requirements.txt，按第 2 段 pip freeze 钉版本）
+Flask==3.1.3
+PyMySQL==1.2.3
+requests==2.34.2
+
+## 端口（老机器 → 本包）
+#   TCP 2999 → 2007        主服务（游戏 API + /live 面板 + /admin 后台）
+#   UDP 8125 → 19458       联机房间服（**端口变了**，客户端不用改：地址是下发的）
+#   TCP 8125 → 11925       房间服 /stats（拆开，只绑 127.0.0.1）
+#   TCP 9002 → 2500        聊天 WebSocket（内部管道；客户端连的是主服务 /account/ws，
+#                          由 nginx 转给 ws 容器，所以客户端不用改）
+#   TCP 520    不变        1Panel 面板
+#
+#   ★ 容器内外同号：容器里也是 2007 / 19458 / 2500 / 11925，
+#     所以 `docker exec` 里自查不用换算，排障手册里的命令可以直接照抄。
+
+## 目标服务器
+#   主机/域名 : beta.admin.xyz
+#   公网 IPv4 : 103.24.218.98     ← 必须填在 WB_SKY_UDP_HOST，客户端据此联机
+#   数据库    : 1Panel 应用商店的 MySQL，库 skygame / 用户 wbsky（库名与账号可以不同名）
+#   项目目录  : /opt/1panel/apps/skywb
+
+## 生效中的关键配置（与老机器一致，迁移别丢）
+#   udp_room_capacity=6      udp_room_merge=false（关掉中途合并，避免瞬移）
+#   udp_rtt_probe_ms=0       udp_keep_player_id=true
+#   udp_debug_gamemsg=false  log_requests=true      use_mysql=true
+#   all_user_consumables_count=999   all_user_candles=999
+
+## ============ 第 2 段：老机器实测快照（原样保留） ============
+## OS
+PRETTY_NAME="Ubuntu 22.04 LTS"
+NAME="Ubuntu"
+VERSION_ID="22.04"
+Linux ser6503931098 5.15.0-194-generic #204-Ubuntu SMP Wed Sep 2 13:09:23 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+
+## python
+Python 3.10.12
+Python 3.10.12
+
+## node
+v20.19.0
+10.8.2
+
+## mysql
+mysql client 未安装(宿主机)
+
+## pip freeze (/wbsky/venv)
+blinker==1.9.0
+certifi==2026.7.22
+charset-normalizer==3.5.2
+click==8.5.0
+Flask==3.1.3
+idna==3.20
+itsdangerous==2.2.0
+Jinja2==3.1.6
+MarkupSafe==3.0.4
+PyMySQL==1.2.3
+requests==2.34.2
+urllib3==2.8.0
+Werkzeug==3.1.9
+
+## sky-enet 版本
+  "version": "0.1.5",
+
+## 端口（老机器实测）
+udp   UNCONN 0      0            0.0.0.0:8125       0.0.0.0:*    users:(("node",pid=302389,fd=18))                                                                                                                       
+tcp   LISTEN 0      511          0.0.0.0:8125       0.0.0.0:*    users:(("node",pid=302389,fd=19))                                                                                                                       
+tcp   LISTEN 0      128          0.0.0.0:9002       0.0.0.0:*    users:(("python",pid=1018,fd=3))                                                                                                                        
+tcp   LISTEN 0      128          0.0.0.0:2999       0.0.0.0:*    users:(("python",pid=296478,fd=7),("python",pid=296478,fd=6),("python",pid=296475,fd=6))                                                                
+tcp   LISTEN 0      4096         0.0.0.0:520        0.0.0.0:*    users:(("1panel-core",pid=643,fd=24))                                                                                                                   
+
+## supervisor 程序（老机器实测）
+#   dispatch / gameserver 指向 /HSR/*，与光遇无关，是别的项目残留
+#   → 本包已删除这两个配置，不再托管
+dispatch:dispatch_00             RUNNING   pid 925, uptime 1 day, 12:20:27
+gameserver:gameserver_00         RUNNING   pid 928, uptime 1 day, 12:20:27
+sky0155-udp:sky0155-udp_00       RUNNING   pid 302389, uptime 0:17:17
+wbsky-server:wbsky-server_00     RUNNING   pid 296475, uptime 0:31:22
+wbsky-ws:wbsky-ws_00             RUNNING   pid 1018, uptime 1 day, 12:20:27

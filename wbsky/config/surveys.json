@@ -1,0 +1,37 @@
+{
+  "surveys": [
+    {
+      "id": "mainstreet_soundbath_anniv_2025",
+      "hint_text": "hint_questionnaire_00",
+      "system_id": "7BVY9G2",
+      "system_type": "SurveyMonkey",
+      "reward_id": "survey_mainstreet_soundbath_on_exit",
+      "bst_trigger": "mainstreet_soundbath_on_exit",
+      "odds": 1,
+      "delay": 0,
+      "group_type": "multi_group"
+    },
+    {
+      "id": "mainstreet_soundbath_on_exit",
+      "hint_text": "hint_questionnaire_00",
+      "system_id": "5YW9CP6",
+      "system_type": "SurveyMonkey",
+      "reward_id": "survey_mainstreet_soundbath_on_exit",
+      "bst_trigger": "mainstreet_soundbath_on_exit",
+      "odds": 3,
+      "delay": 0,
+      "group_type": "multi_group"
+    },
+    {
+      "id": "new_players_0_23_0",
+      "hint_text": "hint_questionnaire_candle_03",
+      "system_id": "M3LCYK7",
+      "system_type": "SurveyMonkey",
+      "reward_id": "survey_new_players_0_23_0",
+      "bst_trigger": "dayhub_tutorial_finished",
+      "odds": 4,
+      "delay": 0,
+      "group_type": "multi_group"
+    }
+  ]
+}

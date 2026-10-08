@@ -1,0 +1,271 @@
+=== A. 在线相关实现位置 ===
+349:            "online_friends", "set_rank", "currency", "forge_rates", "motd",
+383:            "online_friends", "set_rank", "currency", "forge_rates", "motd",
+417:            "online_friends", "set_rank", "currency", "forge_rates", "motd",
+457:            "online_friends", "set_rank", "currency", "forge_rates", "motd",
+693:            "last_seen_outfit": _fo,
+705:            "is_online": False,
+706:            "last_seen": None,
+772:def _friend_entry(user_id, fid):
+794:        "outfit": _fo, "last_seen_outfit": _fo,
+1047:@account_bp.route("/get_online_friends", methods=["POST"])
+1048:def get_online_friends():
+1050:    (win3 account/get_online_friends/get_online_friends.py:195-207) returns a
+1051:    populated `online_friends` list, and each entry carries
+1065:        _social_log("get_online_friends.rows.err", repr(e))
+1097:            "is_online": True,
+1104:        "online_friends": out,
+1105:        "refresh_online_friends": out,
+1106:        "set_online_friends": out,
+1107:        "update_online_friends": [],
+1113:    _social_log("get_online_friends.resp", {"user": me, "n": len(out)})
+5246:                update_online_friends:[{friend_id, level_id}]}
+5317:            "level": fr_level, "last_seen_outfit": None,
+5352:        "update_online_friends": ([{"friend_id": target, "level_id": friend_level}] if target else []),
+
+=== B. get_online_friends 全文 ===
+line=1048
+        "total_friends": len(statues),
+        "total_pages": len(pages),
+        "timestamp": int(time.time() * 1000),
+    })
+
+@account_bp.route("/get_online_friends", methods=["POST"])
+def get_online_friends():
+    """2026-10-05: we used to return four empty lists. The reference
+    (win3 account/get_online_friends/get_online_friends.py:195-207) returns a
+    populated `online_friends` list, and each entry carries
+    `constellation_position` {page_index, node_index} -- that is what puts a
+    friend's star on the Home constellation -- plus nickname and outfit.
+    An empty list meant the friend star chart had nothing to draw."""
+    req = request.get_json(force=True, silent=True) or {}
+    me = req.get("user") or req.get("user_id")
+    now = int(time.time())
+    out = []
+    rows = []
+    try:
+        rows = database.query_all(
+            "SELECT friend_id, nickname FROM friends WHERE user_id = ? "
+            "ORDER BY created_at ASC LIMIT 200", (me,)) or []
+    except Exception as e:
+        _social_log("get_online_friends.rows.err", repr(e))
+    for r in rows:
+        fid = r.get("friend_id")
+        if not fid:
+            continue
+        fr = {}
+        try:
+            fr = database.get_friendship(me, fid) or {}
+        except Exception:
+            fr = {}
+        nick = (str(fr.get("custom_name") or "").strip()
+                or str(r.get("nickname") or "").strip() or fid[:8])
+        node = None
+        try:
+            node = database.add_to_constellation(me, fid)
+        except Exception:
+            node = None
+        pos = None
+        if node is not None and int(node) >= 0:
+            pos = {"page_index": int(node) // 8, "node_index": int(node)}
+        outfit = None
+        try:
+            outfit = _outfit_payload(fid)
+        except Exception:
+
+=== C. _friend_entry 全文 ===
+line=772
+def _friend_entry(user_id, fid):
+    """构造一条客户端认的 AccountFriend 条目（含 friendUpdateTime）。"""
+    nick = ""
+    ts = 0
+    try:
+        row = database.query_one(
+            "SELECT nickname, created_at FROM friends WHERE user_id = ? AND friend_id = ?",
+            (user_id, fid))
+        if row:
+            nick = row.get("nickname") or ""
+            ts = int(row.get("created_at") or 0)
+    except Exception as e:
+        _social_log("friend_entry.err", repr(e))
+    try:
+        _fo = _outfit_payload(fid)
+    except Exception:
+        _fo = None
+    return {
+        "update_friends": True,
+        "AccountFriend": fid, "friend_id": fid, "friend": fid,
+        "nickname": (nick or "").strip() or fid[:8],
+        "level": 1, "friend_level": 1,
+        "outfit": _fo, "last_seen_outfit": _fo,
+        "friendUpdateTime": ts or 1, "updateTime": ts or 1,
+    }
+
+
+def _friend_pair(req):
+    """从请求里取 (我, 对方)。字段名在客户端串表里是 /friend /target /recv_user。"""
+    me = _req_user(req)
+    fid = _pick_any(req, "friend", "target", "recv_user", "friend_id", "user_id")
+    return me, (str(fid).strip() if fid else "")
+
+
+@account_bp.route("/set_friend_name", methods=["POST"])
+def set_friend_name():
+    """给好友改昵称 —— 游戏里对方头顶那个「铅笔」按钮点的就是它。
+
+    ★ 客户端字段（libBootloader.so 字符串簇）：`/friend` + `/name`。
+      URL 串紧跟在 `AccountMessageType` 那一片里：
+        /name | /account/drop_unlock | /friend | /account/set_friend_name |
+        /account/set_friend_favorite | /blocked | /account/set_friend_block |
+        /mute | /account/set_friend_mute | /warp_blocked | /account/set_friend_warp_blocked |
+        /hint | /account/remove_relationship_hint
+      之前这些路由**全都没实现** → 被 catch-all 兜成 `{}` → 铅笔点了没有任何反应。
+    """
+    req = request.get_json(force=True, silent=True) or {}
+    _social_log("set_friend_name.req", req)
+    me, fid = _friend_pair(req)
+    name = _pick_any(req, "name", "nickname", "friend_name")
+    name = ("" if name is None else str(name))[:190]
+    if not me or not fid:
+        return jsonify({"error": "missing user or friend"}), 400
+    try:
+        if not database.query_one(
+                "SELECT user_id FROM friends WHERE user_id = ? AND friend_id = ?", (me, fid)):
+            database.execute(
+                "INSERT INTO friends (user_id, friend_id, nickname, level, created_at) "
+                "VALUES (?,?,?,?,?)", (me, fid, name, 0, _now()))
+        else:
+            database.execute(
+                "UPDATE friends SET nickname = ? WHERE user_id = ? AND friend_id = ?",
+                (name, me, fid))
+    except Exception as e:
+        _social_log("set_friend_name.err", repr(e))
+    entry = _friend_entry(me, fid)
+    resp = {"result": "ok", "status": "ok", "ok": True,
+            "set_friends": [entry], "friend": fid, "name": name, "nickname": name}
+    _social_log("set_friend_name.resp", {"user": me, "friend": fid, "name": name})
+    return jsonify(resp)
+
+
+def _friend_flag_route(flag):
+    """set_friend_favorite / block / mute / warp_blocked —— 都是开关，回包让 UI 生效即可。"""
+    req = request.get_json(force=True, silent=True) or {}
+    me, fid = _friend_pair(req)
+    value = _pick_any(req, flag, "value", "enabled", "on")
+    _social_log("set_friend_%s" % flag, {"user": me, "friend": fid, "value": value})
+    if not me or not fid:
+        return jsonify({"error": "missing user or friend"}), 400
+    entry = _friend_entry(me, fid)
+    return jsonify({"result": "ok", "status": "ok", "ok": True, flag: bool(value),
+                    "set_friends": [entry], "friend": fid})
+
+
+@account_bp.route("/set_friend_favorite", methods=["POST"])
+def set_friend_favorite():
+    return _friend_flag_route("favorite")
+
+
+@account_bp.route("/set_friend_block", methods=["POST"])
+
+=== D. get_friend_statues 里的 is_online/outfit ===
+line=931
+def get_friend_statues():
+    """好友星座（星星）列表 + 星座页。
+
+    客户端字段（.so 字符串簇）：set_friend_statues / update_friend_statues /
+    sort_ver / constellation_friend_pages。
+
+    ★ 2026-10-04 对齐参考服务器（win3/account/get_friend_statues + 真机抓包）：
+      外层信封必须有 result / user_id / total_friends，
+      并且 `set_friend_statues` 要**真的把已加的好友列出来**（原来永远回空数组，
+      客户端认为一个好友都没有 ⇒ 遇境星座上不长蜡烛、好友树点关注就被回退）。
+      每个星座页同时给 `name` 和 `page_index` 两个键（两代客户端各取所需）。
+    """
+    req = request.get_json(force=True, silent=True) or {}
+    me = _req_user(req)
+
+    # ---- 星座页（10 页，每页若干好友）----
+    pages = []
+    if me:
+        try:
+            row = database.query_one(
+                "SELECT pages FROM friend_constellation_pages "
+                "WHERE user_id = ? ORDER BY id ASC LIMIT 1", (me,))
+            if row and row.get("pages"):
+                pages = json.loads(row["pages"])
+        except Exception as e:
+            _social_log("get_friend_statues.err", repr(e))
+            pages = []
+    if not isinstance(pages, list):
+        pages = []
+    for i, pg in enumerate(pages):
+        if not isinstance(pg, dict):
+            continue
+        if "page_index" not in pg:
+            pg["page_index"] = i
+        # authority page object is exactly {page_index, friends}
+        pg.pop("name", None)
+    # 2026-10-04h: the authority (win3 get_friend_statues.py:243-271) builds the
+    # page list from pages_dict, i.e. it emits ONLY pages that actually hold a
+    # friend. Emitting ten mostly-empty pages made the Home constellation chart
+    # render wrong.
+    pages = [pg for pg in pages if isinstance(pg, dict) and pg.get("friends")]
+
+    # ---- 好友星星（set_friend_statues）----
+    statues = []
+    if me:
+        try:
+            rows = database.query_all(
+                "SELECT friend_id, nickname FROM friends WHERE user_id = ? "
+                "ORDER BY created_at ASC LIMIT 200", (me,))
+        except Exception as e:
+            _social_log("get_friend_statues.rows.err", repr(e))
+            rows = []
+        for r in (rows or []):
+            fid = r.get("friend_id")
+            if not fid:
+                continue
+            try:
+                node = database.add_to_constellation(me, fid)
+            except Exception:
+                node = -1
+            # full AccountFriendStatue entry (see the reference server)
+            fr = {}
+            try:
+                fr = database.get_friendship(me, fid) or {}
+            except Exception:
+                fr = {}
+            try:
+                _ab = [int(a) for a in json.loads(fr.get("abilities") or "[]")]
+            except Exception:
+                _ab = []
+            try:
+                _lvl = int(fr.get("relationship_level") or 1)
+            except (TypeError, ValueError):
+                _lvl = 1
+            try:
+                _wc = int(fr.get("created_at") or 0)
+            except (TypeError, ValueError):
+                _wc = 0
+            try:
+                _st_outfit = _outfit_payload(fid)
+            except Exception as e:
+
+=== E. 现在谁在线（UDP） vs 库里 friends 表 ===
+UDP 在线 8 人:
+   ab5facd6-05c3-46fb-8015-50df01d8d5e7  level=SkyHub2 遇境
+   a3c1bbaf-7e72-41ac-aa6a-8d175f9ccd1a  level=SkyHub2 遇境
+   f3265f49-4cc5-4459-bd1c-654ea5018905  level=SkyHub2 遇境
+   d1bddace-7b49-4c22-ad7a-1bf8b81ac39d  level=SkyHub2 遇境
+   17758c84-b99b-46ed-b063-fc176e501725  level=SkyHub2 遇境
+   d32398c4-a7f5-45a6-aa35-a1dc0b83cbda  level=SkyHub2 遇境
+   9e7a86e4-c73a-4130-97c2-d0e6fe252fa3  level=SkyHub2 遇境
+   9f1e0626-852a-4065-9c99-5a7e934894f2  level=SkyHub2 遇境
+表: ['chat_inbox', 'chat_messages', 'commerce_orders', 'currency', 'friend_constellation_pages', 'friends', 'friendships', 'gift_messages', 'license_keys', 'pending_invites', 'social_feed_post', 'users']
+  friends 列: ['user_id', 'friend_id', 'nickname', 'level', 'created_at']
+  friendships 列: ['id', 'user_id', 'friend_id', 'custom_name', 'relationship_level', 'abilities', 'hints', 'given', 'recvd', 'soft_deleted', 'created_at']
+  friends 行数: 599
+    {'user_id': 'f22e627a-6154-4391-9b2f-7a', 'friend_id': '3f463800-855f-4603-8f54-3f', 'nickname': '', 'level': '1', 'created_at': '1791118513'}
+    {'user_id': '3f463800-855f-4603-8f54-3f', 'friend_id': 'f22e627a-6154-4391-9b2f-7a', 'nickname': '小号', 'level': '1', 'created_at': '1791118513'}
+    {'user_id': 'f22e627a-6154-4391-9b2f-7a', 'friend_id': '9ca10afd-dca1-4cf4-bf43-f4', 'nickname': '', 'level': '1', 'created_at': '1791124219'}
+=== OD17_DONE ===
