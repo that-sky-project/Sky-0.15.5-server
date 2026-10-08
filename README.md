@@ -104,7 +104,24 @@ docker compose up -d
 - `2500/tcp` — WebSocket chat
 
 ### 6. Client / 客户端
-Point your patched v0.15.5 client to your server IP. (Client APK not included.)
+
+**Download / 下载：** [Quark Pan / 夸克网盘](https://pan.quark.cn/s/d22b0d8e049a)
+
+#### How to change server domain / 修改服务器地址
+
+The prebuilt APK points to a default server. To point it to **your** server, edit `classes2.dex`:
+
+预编译 APK 默认指向官方服务器。要改成你自己的服务器地址，修改 `classes2.dex`：
+
+1. Open the APK in MT Manager / NP Manager / Dex Editor++ / 用 MT管理器/NP管理器/Dex编辑器++ 打开 APK
+2. Enter `classes2.dex` → `com.tgc.sky` → `BuildConfig` / 进入 `classes2.dex` → `com.tgc.sky` → `BuildConfig`
+3. Find `SKY_SERVER_HOSTNAME` and change the string to your server domain/IP / 找到 `SKY_SERVER_HOSTNAME`，把字符串改成你的服务器域名或 IP
+4. Save and re-sign the APK / 保存后重新签名安装
+
+| | |
+|---|---|
+| ![APK structure](screenshots/24-apk-structure.jpg) | ![Dex editor](screenshots/25-dex-editor.jpg) |
+| ![BuildConfig class](screenshots/26-buildconfig-class.jpg) | ![Edit SKY_SERVER_HOSTNAME](screenshots/27-sky-server-hostname.jpg) |
 
 ---
 
