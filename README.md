@@ -120,8 +120,8 @@ The prebuilt APK points to a default server. To point it to **your** server, edi
 
 | | |
 |---|---|
-| ![APK structure](screenshots/24-apk-structure.jpg) | ![Dex editor](screenshots/25-dex-editor.jpg) |
-| ![BuildConfig class](screenshots/26-buildconfig-class.jpg) | ![Edit SKY_SERVER_HOSTNAME](screenshots/27-sky-server-hostname.jpg) |
+| ![BuildConfig class](screenshots/24-buildconfig-class.jpg) | ![Edit SKY_SERVER_HOSTNAME](screenshots/25-sky-server-hostname.jpg) |
+| ![APK structure](screenshots/26-apk-structure.jpg) | ![Dex editor](screenshots/27-dex-editor.jpg) |
 
 ---
 
