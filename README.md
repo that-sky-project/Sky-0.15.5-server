@@ -8,9 +8,9 @@
 
 ## UDP Server / 联机服务器
 
-The multiplayer UDP layer in this project is a modified version of [that-sky-xysky-udp-room-authority](https://github.com/that-sky-project/that-sky-xysky-udp-room-authority) (Hermes / QWD room manager), adapted for the v0.15.5 client.
+The multiplayer UDP layer in this project is a modified version of [that-sky-xysky-udp](https://github.com/that-sky-project/that-sky-xysky-udp), adapted for the v0.15.5 client.
 
-本项目的多人联机 UDP 层基于 [that-sky-xysky-udp-room-authority](https://github.com/that-sky-project/that-sky-xysky-udp-room-authority)（Hermes / QWD 房间管理器）二改适配 v0.15.5 客户端。
+本项目的多人联机 UDP 层基于 [that-sky-xysky-udp](https://github.com/that-sky-project/that-sky-xysky-udp) 二改适配 v0.15.5 客户端。
 
 Special thanks to **xiaoyu** for the original room-authority design, ENet room nodes, and migration logic.
 
