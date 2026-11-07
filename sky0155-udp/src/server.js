@@ -285,6 +285,33 @@ export class RoomServer extends EventEmitter {
     //   —— m_players[0] 恒为本地玩家自身。因此只要名单里漏掉自己，就会
     //   removePlayer(自己) → SIGABRT。曾经为了"别把自己列进去"而排除自己，正好踩中。
     this.rosterExcludeSelf = cfg.udp_roster_exclude_self ?? false;
+    // ★★ 2026-11-07 加固：只给客户端发它**确实知道**的玩家的销毁通知。
+    //   客户端 NetPlayerBarn 的 RemovePlayer 有硬断言：
+    //     · NetPlayer.cpp(130) netPlayerId != m_players[0].netPlayerId
+    //     · NetPlayer.cpp(148) removed（要删的玩家必须存在）
+    //   只要服务端把一个它名单里没有的 playerId 通过 PLAYER_LEFT /
+    //   PLAYER_CHANGED_LEVEL 发过去，客户端就会 SIGABRT（真机栈：
+    //   NetPlayerBarn::RemovePlayer ← NetGameClient::RemoveDisconnectedPlayer）。
+    //   这里记录"每个连接最后一次收到的名单"，只对名单里的 id 发离开通知。
+    //   名单本身会紧跟一条 EnterGame 刷新，所以漏发的离开通知不会让玩家卡住。
+    this.knownRosterOnly = cfg.udp_roster_known_only !== false;
+    // ★★ 2026-11-07 20:22 真机复现（决定性证据）：
+    //     I NetGameClient: Recvd PlayerLeft
+    //     I NetGameClient:  Remove Player
+    //     E CRASH ASSERT! NetPlayer.cpp (148): removed
+    //   客户端收到服务端的 PlayerLeft 后**直接** removePlayer(id)；只要这个 id
+    //   不在它当前名单里就 SIGABRT。而 onDisconnect 末尾紧跟的 refreshRoster
+    //   (EnterGame) 本身就会让客户端删掉名单里没有的旧玩家 —— 用的是客户端自己
+    //   barn 里的 id，绝不会"未知"。所以默认**不再单独发 PLAYER_LEFT**，
+    //   只靠 EnterGame 收敛；需要旧行为时把 udp_send_player_left 设为 true。
+    this.sendPlayerLeft = cfg.udp_send_player_left === true;
+    // ★★ 2026-11-07 加固：未识别的关卡 ID 通常是解析错位（偏移/字节序），
+    //   把它回传给客户端会让客户端去找它没有的
+    //   Data/Levels/<name>/Resources.lua → Resource.cpp(390) "not loaded" 断言。
+    //   现在遇到未识别的值就保持原关卡/回退到出生点，绝不外发。
+    this.ignoreUnknownLevel = cfg.udp_ignore_unknown_level !== false;
+    this.fallbackLevelId = Number.isInteger(cfg.udp_fallback_level_id)
+      ? (cfg.udp_fallback_level_id >>> 0) : 2018906977; // HubReveal，所有客户端都有
     // ★ 排障用的"原始字节"逃生舱：设了 udp_entergame_raw_hex 就直接把这些字节当成
     //   EnterGame 的 body 发出去（不做任何拼装），用来逐字节试探客户端期望的真实结构。
     this.entergameRaw = cfg.udp_entergame_raw_hex
@@ -511,9 +538,20 @@ export class RoomServer extends EventEmitter {
 
     if (entry.inGame) {
       // 只通知同关卡玩家，避免异图客户端凭空删人
-      const pkt = buildPacket(PKT_PLAYER_LEFT, Buffer.from([entry.playerId, 0]));
-      for (const other of this.peersInLevel(entry.levelId, { exclude: entry.playerId, inst: entry.roomInst || 0 })) {
-        other.send(0, pkt);
+      const leftId = entry.playerId & 0xFF;
+      // 默认不发 PlayerLeft（见构造函数 sendPlayerLeft 的说明）：
+      // 下面的 refreshRoster 会用 EnterGame 名单把这个人删掉，客户端不会越界。
+      if (this.sendPlayerLeft) {
+        const pkt = buildPacket(PKT_PLAYER_LEFT, Buffer.from([leftId, 0]));
+        for (const other of this.peersInLevel(entry.levelId, { exclude: entry.playerId, inst: entry.roomInst || 0 })) {
+          // 客户端对 RemovePlayer(未知 id) 有硬断言：只通知"名单里确实有他"的人。
+          if (this.knownRosterOnly && other._rosterIds && !other._rosterIds.has(leftId)) {
+            this.log.info(`[LEFT-SKIP] -> ${other.addr} 名单里没有 pid=${leftId}，跳过 PLAYER_LEFT`);
+            continue;
+          }
+          if (other._rosterIds) other._rosterIds.delete(leftId);
+          other.send(0, pkt);
+        }
       }
       // 关卡权威让位 + 重新选举 + 通知本图
       const wasAuthority = this.levelAuthority.get(entry.levelId) === entry.playerId;
@@ -588,7 +626,21 @@ export class RoomServer extends EventEmitter {
     if (this.entergameMode === 'off') return;
     // 一张图最多 8 人（count 的断言区间是 [0,8]），超了客户端会直接断言崩溃。
     // ★ p81：inst 指定房间实例（同一张图可以有多个 8 人实例）
-    const list = this.peersInLevel(levelId, { inst }).slice(0, MAX_PLAYER_SLOTS);
+    // ★★ 2026-11-07：同一份名单里绝不能出现两个相同 uuid —— 客户端
+    //   NetPlayerBarn::AddPlayer 的第一条断言就是 !GetPlayerByUuid(uuid)。
+    //   handleJoinGame 里已经会把同账号的旧连接清掉，这里再兜一层，
+    //   防止重连竞态把幽灵条目带进名单（那会直接 SIGABRT）。
+    const list = [];
+    const seenUuid = new Set();
+    for (const p of this.peersInLevel(levelId, { inst })) {
+      const hex = (p.uuid && p.uuid.length === 16) ? p.uuid.toString('hex') : '';
+      const key = (hex && hex !== '00000000000000000000000000000000')
+        ? hex : ('peer:' + String(p.peerId));
+      if (seenUuid.has(key)) continue;
+      seenUuid.add(key);
+      list.push(p);
+      if (list.length >= MAX_PLAYER_SLOTS) break;
+    }
     if (list.length === 0) return;
     for (const p of list) {
       if (excludePeer !== null && p.peerId === excludePeer) continue;
@@ -670,10 +722,25 @@ export class RoomServer extends EventEmitter {
     const uuidBytes = Buffer.from(payload.subarray(0, 16));
 
     // 关卡 ID：不再死读尾部 4 字节，而是多候选偏移 + 字节序归一化
-    const resolved = this.resolveLevel(payload, [
+    let resolved = this.resolveLevel(payload, [
       payload.length - 4, payload.length - 8, 16, 12, 20, 8,
     ]);
-    const levelId = resolved.value;
+    let levelId = resolved.value;
+    // ★★ 2026-11-07：未识别的关卡 ID 绝不外发（详见构造函数 ignoreUnknownLevel）。
+    //   回退顺序：本人上一张已知关卡 → 出生点 HubReveal。
+    if (this.ignoreUnknownLevel && !resolved.recognized) {
+      const prev = (entry.inGame && entry.levelId && KNOWN_LEVEL_IDS.has(entry.levelId >>> 0))
+        ? (entry.levelId >>> 0) : 0;
+      const fallback = prev || this.fallbackLevelId;
+      this.stats.unknownLevel += 1;
+      this.log.warning(
+        `[JOIN] 关卡 ID 未识别 raw=0x${(levelId >>> 0).toString(16)} ` +
+        `(${resolved.from}@${resolved.offset}) → 回退 0x${(fallback >>> 0).toString(16)} ` +
+        `${KNOWN_LEVEL_IDS.get(fallback) || ''} payload=${payload.toString('hex')}`
+      );
+      levelId = fallback;
+      resolved = { value: levelId, recognized: true, from: 'fallback', offset: resolved.offset };
+    }
 
     // ★ 复用本关卡空槽位（1..8），不再无条件递增 —— 见 _allocPlayerId 说明
     // ★★ 2026-10-06：同一连接重新加入（传送/重连）时**保留原 netId**：
@@ -749,6 +816,12 @@ export class RoomServer extends EventEmitter {
     for (const p of listed) p._lastSources = null; // 名单变了 → 下一帧强制关键帧
 
     this.refreshRoster(levelId, entry.roomInst || 0);
+    // ★ 2026-11-07: 经 UDP 中继时，首个可靠 EnterGame 可能在 ENet 通道
+    //   刚建立时丢失，导致客户端收不到名单后反复重连。150ms 后补发一次
+    //   （EnterGame 对重复名单是幂等的）。
+    setTimeout(() => {
+      try { this.refreshRoster(levelId, entry.roomInst || 0); } catch (e) { /* ignore */ }
+    }, 150);
 
     // 让新玩家成为该关卡权威（若还没有权威）
     if (this.electOnJoin) {
@@ -768,6 +841,9 @@ export class RoomServer extends EventEmitter {
   sendRoster(target, list) {
     if (this.entergameMode === 'off') return;
     const forTarget = this.rosterFor(target, list);
+    // 记下这个连接"知道哪些玩家"：PLAYER_LEFT / PLAYER_CHANGED_LEVEL 只发给
+    // 名单里有的人，避免客户端 RemovePlayer(未知 id) 的硬断言。
+    target._rosterIds = new Set(forTarget.map(p => p.playerId & 0xFF));
     const body = this.buildRosterBody(forTarget, target);   // FIX-15b: receiver own level id
     this.log.info(
       `[TX-ROSTER] -> ${target.addr} player_id=${target.playerId} ` +
@@ -797,9 +873,23 @@ export class RoomServer extends EventEmitter {
     }
     // 根因修复：换图上报里带的是同一个关卡 ID，必须用与 join 相同的归一化规则，
     // 否则"进图的人"和"过图进来的人"会被算成两个不同关卡 → 互相看不见。
-    const resolved = this.resolveLevel(payload, [14, 12, 16, 10, payload.length - 4]);
-    const newLevel = resolved.value;
     const oldLevel = entry.levelId;
+    let resolved = this.resolveLevel(payload, [14, 12, 16, 10, payload.length - 4]);
+    let newLevel = resolved.value;
+    // ★★ 2026-11-07：未识别的关卡 ID 通常是解析错位。把它塞进
+    //   PLAYER_CHANGED_LEVEL / 名单会让别的客户端去找不存在的
+    //   Data/Levels/<name>/Resources.lua → Resource.cpp(390) 断言。
+    //   宁可忽略这次换图（保持原关卡），也不外发垃圾 id。
+    if (this.ignoreUnknownLevel && !resolved.recognized) {
+      this.stats.unknownLevel += 1;
+      this.log.warning(
+        `[LEVEL] ${entry.addr} 关卡 ID 未识别 raw=0x${(newLevel >>> 0).toString(16)} ` +
+        `(${resolved.from}@${resolved.offset}) → 忽略本次换图，保持 ` +
+        `0x${(oldLevel >>> 0).toString(16)} ${KNOWN_LEVEL_IDS.get(oldLevel) || ''}`
+      );
+      this.sendElectTo(entry);
+      return;
+    }
 
     // 旧实现无条件 lvSeq+1：真实客户端会周期性发 LevelUpdate，一涨就把
     // 服务端下发给该玩家的所有 GameMsg 的 level_seq 打歪，客户端直接丢弃 →
@@ -862,8 +952,16 @@ export class RoomServer extends EventEmitter {
         // 2026-10-06 还原：回到 raw levelId 比较（p55 改成 roomKey 后有人上线闪退，
         //   先恢复到之前稳定的行为；真要放宽再单独评估）。
         // ★ p81：只通知"旧实例"和"新实例"里的人
-        if ((p.levelId === oldLevel && (p.roomInst || 0) === _oldInst) ||
-            (p.levelId === newLevel && (p.roomInst || 0) === (entry.roomInst || 0))) p.send(0, pkt);
+        const _sameOld = (p.levelId === oldLevel && (p.roomInst || 0) === _oldInst);
+        const _sameNew = (p.levelId === newLevel && (p.roomInst || 0) === (entry.roomInst || 0));
+        if (!_sameOld && !_sameNew) continue;
+        // 未知 playerId 的 PLAYER_CHANGED_LEVEL 同样会走 RemovePlayer 断言；
+        // 名单里没有他（例如换房撞位后 id 变了）就跳过，后面的 EnterGame 会同步。
+        if (this.knownRosterOnly && p._rosterIds && !p._rosterIds.has(entry.playerId & 0xFF)) {
+          this.log.info(`[LV-SKIP] -> ${p.addr} 名单里没有 pid=${entry.playerId}，跳过 PLAYER_CHANGED_LEVEL`);
+          continue;
+        }
+        p.send(0, pkt);
       }
       for (const p of this.peers.values()) {
         if (p.inGame && p.levelId === newLevel && (p.roomInst || 0) === (entry.roomInst || 0)) p._lastSources = null;
@@ -1786,6 +1884,10 @@ export class PeerEntry {
     this.connectedAt = Date.now();
     this.lastActive = Date.now();
     this._lastSources = null; // 上一帧参与聚合的玩家集合，用来决定是否强制关键帧
+    // 最后一次发给这个连接的 EnterGame 名单里的 playerId 集合。
+    // PLAYER_LEFT / PLAYER_CHANGED_LEVEL 只发给名单里有的 id —— 客户端
+    // RemovePlayer(未知 id) 会命中 NetPlayer.cpp 的硬断言（SIGABRT）。
+    this._rosterIds = new Set();
 
     this.playerReader = new SnapshotReader();
     this.playerWriter = new SnapshotWriter(true);
