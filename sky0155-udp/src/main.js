@@ -129,9 +129,15 @@ logger.info('='.repeat(62));
 // 关联 PeerEntry 的发送/断开回调
 const wireSend = (peerId, channel, data, reliable = true) => {
   try {
-    return enetServer.send(peerId, channel, data, reliable);
+    const r = enetServer.send(peerId, channel, data, reliable);
+    if (typeof r === 'number' && r < 0) {
+      logger.warning(`[TX-FAIL] peer=${peerId} ch=${channel} len=${data.length} ret=${r}`);
+    }
+    // 2026-11-07: force the queued reliable packet out immediately.
+    try { enetServer.flush(); } catch { /* ignore */ }
+    return r;
   } catch (err) {
-    logger.debug(`发送失败: ${err.message}`);
+    logger.warning(`[TX-EXC] peer=${peerId} ch=${channel} len=${data.length} ${err && err.message}`);
     return -1;
   }
 };

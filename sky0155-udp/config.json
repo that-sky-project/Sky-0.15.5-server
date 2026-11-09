@@ -37,5 +37,8 @@
   "udp_level_alias_pairs": {},
   "udp_room_capacity": 6,
   "udp_room_merge": false,
-  "udp_rtt_probe_ms": 0
+  "udp_rtt_probe_ms": 0,
+  "udp_roster_known_only": true,
+  "udp_ignore_unknown_level": true,
+  "udp_send_player_left": false
 }
